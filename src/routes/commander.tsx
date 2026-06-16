@@ -6,7 +6,7 @@ import { db } from "@/lib/db";
 import { assessBuilding, RISK_COLORS } from "@/lib/vulnerability";
 import { FloorPlan } from "@/components/floor-plan";
 import { RiskBadge } from "@/components/risk-badge";
-import { Users, Heart, Flame } from "lucide-react";
+import { Users, Heart, Flame, MapPin, Navigation, Truck } from "lucide-react";
 
 export const Route = createFileRoute("/commander")({
   head: () => ({ meta: [{ title: "Commander View — WB-FDVA" }, { name: "description", content: "Full-screen incident command and rescue prioritization dashboard." }] }),
@@ -44,31 +44,71 @@ function CommanderPage() {
 
   return (
     <AppShell title={`COMMAND · ${incident.incidentId}`} subtitle={`${building?.name} · Started ${new Date(incident.startedAt).toLocaleTimeString()} · auto-refresh 5s`}>
-      <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
-        <div className="rounded-lg border border-risk-red/40 bg-card p-4">
-          <h3 className="text-xs uppercase tracking-[0.18em] text-risk-red mb-3 flex items-center gap-2"><Flame className="h-4 w-4 animate-pulse" /> Live Floor Plans</h3>
-          <div className="grid gap-3 sm:grid-cols-2">
-            {floors?.slice().reverse().map((f) => (
-              <div key={f.id}>
-                <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">L{f.level} {f.id === incident.floorId && <span className="ml-1 rounded bg-risk-red text-primary-foreground px-1.5 py-0.5">ORIGIN</span>}</div>
-                <FloorPlan floor={f} zones={zones?.filter((z) => z.floorId === f.id) ?? []} zoneRisks={riskMap} />
+      <div className="grid gap-4 lg:grid-cols-[1fr_300px]">
+        
+        {/* Left Column - Maps & Floor Plans */}
+        <div className="space-y-4">
+          <div className="rounded-lg border border-border bg-card overflow-hidden h-64 relative">
+            <div className="absolute inset-0 bg-[url('https://maps.googleapis.com/maps/api/staticmap?center=40.7128,-74.0060&zoom=16&size=800x400&maptype=satellite')] bg-cover bg-center opacity-70 mix-blend-luminosity"></div>
+            <div className="absolute inset-0 bg-gradient-to-t from-background/80 to-transparent pointer-events-none"></div>
+            <div className="absolute bottom-4 left-4 right-4 flex items-end justify-between">
+              <div>
+                <h3 className="text-sm font-bold flex items-center gap-2"><MapPin className="h-4 w-4 text-risk-red" /> Building Location</h3>
+                <p className="text-xs text-foreground/80">{building?.address}</p>
               </div>
-            ))}
+              <div className="bg-background/90 backdrop-blur rounded px-3 py-1.5 border border-border shadow-sm flex items-center gap-2">
+                <Navigation className="h-3.5 w-3.5 text-blue-500" />
+                <span className="text-[10px] uppercase font-bold text-blue-500">Evacuation Route: Primary Active</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-risk-red/40 bg-card p-4">
+            <h3 className="text-xs uppercase tracking-[0.18em] text-risk-red mb-3 flex items-center gap-2"><Flame className="h-4 w-4 animate-pulse" /> Live Floor Plans</h3>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {floors?.slice().reverse().map((f) => (
+                <div key={f.id}>
+                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">L{f.level} {f.id === incident.floorId && <span className="ml-1 rounded bg-risk-red text-primary-foreground px-1.5 py-0.5">ORIGIN</span>}</div>
+                  <FloorPlan floor={f} zones={zones?.filter((z) => z.floorId === f.id) ?? []} zoneRisks={riskMap} />
+                </div>
+              ))}
+            </div>
           </div>
         </div>
+
+        {/* Right Column - Stats & Resources */}
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
-            <Stat icon={Users} label="Total Occupants" value={totalOcc} />
+            <Stat icon={Users} label="Occupants" value={totalOcc} />
             <Stat icon={Heart} label="Special Needs" value={totalSN} tone="warn" />
           </div>
+
+          <div className="rounded-lg border border-border bg-card p-4">
+            <h3 className="text-xs uppercase tracking-[0.18em] text-muted-foreground mb-3 flex items-center gap-2"><Truck className="h-4 w-4" /> Resources Deployment</h3>
+            <div className="space-y-3">
+              <div className="flex justify-between items-center text-sm">
+                <span className="font-medium text-blue-500">Fire Engines</span>
+                <span className="font-mono bg-secondary px-2 py-0.5 rounded">3 En Route</span>
+              </div>
+              <div className="flex justify-between items-center text-sm">
+                <span className="font-medium text-risk-orange">Ambulances</span>
+                <span className="font-mono bg-secondary px-2 py-0.5 rounded">2 Arrived</span>
+              </div>
+              <div className="flex justify-between items-center text-sm">
+                <span className="font-medium text-risk-green">Hazmat Team</span>
+                <span className="font-mono bg-secondary px-2 py-0.5 rounded">Standby</span>
+              </div>
+            </div>
+          </div>
+
           <div className="rounded-lg border border-border bg-card">
             <div className="border-b border-border px-4 py-3 text-sm font-semibold flex items-center justify-between">
               <span>Rescue Priority</span>
-              <span className="text-[10px] uppercase text-muted-foreground">{critical.length} critical</span>
+              <span className="text-[10px] uppercase text-muted-foreground">{critical.length} critical zones</span>
             </div>
-            <ol className="divide-y divide-border max-h-[520px] overflow-y-auto">
+            <ol className="divide-y divide-border max-h-[400px] overflow-y-auto">
               {impacts.slice(0, 12).map((i, idx) => (
-                <li key={i.zone.id} className="flex items-center gap-3 px-4 py-3">
+                <li key={i.zone.id} className="flex items-center gap-3 px-4 py-3 hover:bg-secondary/20">
                   <div className="grid h-8 w-8 shrink-0 place-items-center rounded-md font-bold text-sm" style={{ background: `${RISK_COLORS[i.risk]}33`, color: RISK_COLORS[i.risk] }}>{idx + 1}</div>
                   <div className="min-w-0 flex-1">
                     <div className="text-sm font-semibold truncate">{i.zone.zoneId} · {i.zone.name}</div>

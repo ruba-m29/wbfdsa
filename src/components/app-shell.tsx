@@ -17,7 +17,11 @@ export function AppShell({ title, subtitle, actions, children }: { title: string
                 <span className="inline-block h-1.5 w-1.5 rounded-full bg-risk-green animate-pulse" />
                 Live · Emergency Operations
               </div>
-              <h1 className="truncate text-lg font-bold tracking-tight sm:text-xl">{title}</h1>
+              <div className="flex items-center gap-2">
+                <img src="/logo.svg" alt="TrustGrid Logo" className="h-6 w-auto object-contain hidden sm:block bg-white rounded-sm p-0.5" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+                <h1 className="truncate text-lg font-bold tracking-tight sm:text-xl">{title}</h1>
+                <span className="hidden sm:inline-flex px-1.5 py-0.5 rounded-sm bg-primary/10 text-primary text-[10px] font-bold">TrustGrid.AI</span>
+              </div>
               {subtitle && <p className="truncate text-xs text-muted-foreground">{subtitle}</p>}
             </div>
             <div className="flex items-center gap-2 shrink-0">

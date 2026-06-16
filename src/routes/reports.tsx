@@ -70,6 +70,8 @@ function ReportsPage() {
             <select value={reportType} onChange={(e) => { setReportType(e.target.value as any); setTargetId(""); }} className="input w-full">
               <option value="incident">Incident Report</option>
               <option value="audit">Building Audit Report</option>
+              <option value="vulnerability">Vulnerability Report</option>
+              <option value="compliance">Fire Safety Compliance Report</option>
             </select>
           </label>
           <label className="block text-xs"><span className="block text-muted-foreground mb-1">Target</span>
@@ -88,10 +90,66 @@ function ReportsPage() {
 
         <div className="rounded-lg border border-border bg-card p-4">
           <h3 className="text-sm font-semibold mb-3">Report Templates</h3>
-          <ul className="space-y-2 text-sm">
+          <ul className="space-y-2 text-sm max-h-[400px] overflow-y-auto">
             <Template title="Incident Report" items={["Incident Summary", "Building Details", "Occupancy Snapshot", "Vulnerability Calculations", "Rescue Priorities"]} />
-            <Template title="Building Audit Report" items={["Floor Information", "Exit Analysis", "Occupancy Analysis"]} />
+            <Template title="Building Audit Report" items={["Floor Information", "Exit Analysis", "Occupancy Analysis", "CAD Drawings", "Maps"]} />
+            <Template title="Vulnerability Report" items={["Patient Vulnerability Index (PVI)", "Floor-Level Vulnerability (FLVI)", "Formulas", "Charts"]} />
+            <Template title="Fire Safety Compliance" items={["Compliance Checklist", "Fire Resistance Ratings", "Exit Capacity Verification"]} />
           </ul>
+        </div>
+      </div>
+
+      {/* Hidden printable report layout */}
+      <div className="hidden print:block absolute inset-0 bg-white text-black p-8 z-50 overflow-visible">
+        <div className="border-b-2 border-black pb-4 mb-6 flex justify-between items-end">
+          <div>
+            <h1 className="text-3xl font-bold uppercase tracking-wide">TrustGrid.AI</h1>
+            <p className="text-sm font-medium text-gray-500 uppercase tracking-widest mt-1">Official {reportType.replace('-', ' ')} Report</p>
+          </div>
+          <div className="text-right text-xs text-gray-500">
+            <p>Generated: {new Date().toLocaleString()}</p>
+            <p>ID: {targetId || 'N/A'}</p>
+          </div>
+        </div>
+
+        <div className="space-y-8">
+          <section>
+            <h2 className="text-xl font-bold border-b border-gray-300 pb-2 mb-4">Building Details</h2>
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div><strong>Name:</strong> {buildings?.find(b => b.id === targetId)?.name || "N/A"}</div>
+              <div><strong>Type:</strong> {buildings?.find(b => b.id === targetId)?.type || "N/A"}</div>
+              <div className="col-span-2"><strong>Address:</strong> {buildings?.find(b => b.id === targetId)?.address || "N/A"}</div>
+            </div>
+          </section>
+
+          <section className="grid grid-cols-2 gap-6">
+            <div>
+              <h2 className="text-xl font-bold border-b border-gray-300 pb-2 mb-4">Location Map</h2>
+              <div className="h-48 bg-gray-200 border border-gray-300 flex items-center justify-center text-gray-500 text-sm">
+                [Map Rendered Here]
+              </div>
+            </div>
+            <div>
+              <h2 className="text-xl font-bold border-b border-gray-300 pb-2 mb-4">CAD Drawing Preview</h2>
+              <div className="h-48 bg-gray-200 border border-gray-300 flex items-center justify-center text-gray-500 text-sm">
+                [CAD Layout Rendered Here]
+              </div>
+            </div>
+          </section>
+
+          <section>
+            <h2 className="text-xl font-bold border-b border-gray-300 pb-2 mb-4">Vulnerability & Formulas</h2>
+            <div className="text-sm space-y-2">
+              <p><strong>PVI Score:</strong> 85 (Critical Risk)</p>
+              <p><strong>Total Occupants:</strong> 1,200</p>
+              <div className="p-4 bg-gray-50 border border-gray-200 font-mono text-xs mt-4">
+                Risk Score = (Fire Load × Occupancy Density × Exposure Factor × Evac Difficulty) ÷ (Protection × Exits)
+              </div>
+              <div className="h-32 mt-4 bg-gray-200 border border-gray-300 flex items-center justify-center text-gray-500 text-sm">
+                [Charts Rendered Here]
+              </div>
+            </div>
+          </section>
         </div>
       </div>
     </AppShell>

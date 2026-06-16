@@ -5,6 +5,7 @@ import { useApp } from "@/lib/store";
 const items = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/buildings", label: "Buildings", icon: Building2 },
+  { to: "/building-input", label: "Building Input", icon: Building2 },
   { to: "/floor-plans", label: "Floor Plans", icon: Map },
   { to: "/occupancy", label: "Occupancy", icon: CalendarRange },
   { to: "/personnel", label: "Personnel", icon: Users },
@@ -22,12 +23,13 @@ export function AppSidebar() {
   return (
     <aside className="hidden md:flex h-screen sticky top-0 w-60 shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
       <div className="flex items-center gap-2 px-5 py-5 border-b border-sidebar-border">
-        <div className="grid h-9 w-9 place-items-center rounded-md bg-primary text-primary-foreground shadow-[0_0_24px_-6px_var(--primary)]">
-          <Flame className="h-5 w-5" />
+        <div className="grid h-10 w-10 place-items-center rounded-md bg-white text-primary-foreground shrink-0 overflow-hidden shadow-sm">
+          <img src="/logo.svg" alt="TrustGrid Logo" className="h-full w-full object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
+          <ShieldAlert className="h-5 w-5 text-primary hidden" />
         </div>
         <div className="min-w-0">
           <div className="text-sm font-bold tracking-tight">WB-FDVA</div>
-          <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Ops Console</div>
+          <div className="text-[10px] uppercase tracking-[0.05em] text-muted-foreground">powered by <span className="font-semibold">TrustGrid.AI</span></div>
         </div>
       </div>
       <nav className="flex-1 overflow-y-auto px-2 py-3">

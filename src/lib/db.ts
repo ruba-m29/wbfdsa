@@ -12,11 +12,26 @@ export type BuildingType =
 
 export interface Building {
   id?: number;
+  buildingId?: string;
   name: string;
-  type: BuildingType;
-  address: string;
+  ownerName?: string;
+  type: BuildingType | string;
+  functionalCategory?: string;
   floors: number;
+  buildingHeight?: number;
   totalArea: number;
+  yearOfConstruction?: number;
+  contactNumber?: string;
+  email?: string;
+  address: string;
+  addressLine1?: string;
+  addressLine2?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  pincode?: string;
+  latitude?: number;
+  longitude?: number;
   constructionType: string;
   fireResistanceRating: string;
   createdAt: number;

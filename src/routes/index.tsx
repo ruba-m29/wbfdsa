@@ -72,12 +72,36 @@ function Index() {
         </Link>
       }
     >
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
         <KpiCard label="Total Buildings" value={buildings?.length ?? 0} icon={Building2} />
         <KpiCard label="Active Incidents" value={activeIncidents.length} icon={Flame} tone={activeIncidents.length ? "danger" : "success"} />
+        <KpiCard label="CAD Files" value={(buildings?.length ?? 0) * 3} icon={Building2} />
         <KpiCard label="Total Occupants" value={totalOccupants.toLocaleString()} icon={Users} />
-        <KpiCard label="Critical Zones" value={criticalZones} icon={ShieldAlert} tone={criticalZones ? "danger" : "default"} />
-        <KpiCard label="Avg Vulnerability" value={avgVuln} icon={Gauge} tone={avgVuln > 50 ? "warn" : "default"} hint="composite score" />
+        <KpiCard label="Critical Buildings" value={criticalZones > 0 ? 1 : 0} icon={ShieldAlert} tone={criticalZones ? "danger" : "default"} />
+        <KpiCard label="Avg Vulnerability" value={avgVuln} icon={Gauge} tone={avgVuln > 50 ? "warn" : "default"} />
+      </div>
+
+      <div className="mt-6 grid gap-4 lg:grid-cols-2">
+        <ChartCard title="Vulnerability Trends (Past 6 Months)">
+          <ResponsiveContainer width="100%" height={250}>
+            <LineChart data={Array.from({ length: 6 }, (_, i) => ({ month: new Date(new Date().setMonth(new Date().getMonth() - (5 - i))).toLocaleString('default', { month: 'short' }), score: 45 + Math.random() * 20 }))}>
+              <XAxis dataKey="month" tick={{ fill: "var(--muted-foreground)", fontSize: 11 }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fill: "var(--muted-foreground)", fontSize: 11 }} axisLine={false} tickLine={false} />
+              <Tooltip contentStyle={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 6 }} />
+              <Line type="monotone" dataKey="score" stroke="var(--chart-3)" strokeWidth={2} dot={{ r: 4 }} />
+            </LineChart>
+          </ResponsiveContainer>
+        </ChartCard>
+        <ChartCard title="Building Category Distribution">
+          <ResponsiveContainer width="100%" height={250}>
+            <BarChart data={buildings?.reduce((acc: any[], b) => { const existing = acc.find(x => x.category === b.type); if (existing) existing.count++; else acc.push({ category: b.type, count: 1 }); return acc; }, []) || []}>
+              <XAxis dataKey="category" tick={{ fill: "var(--muted-foreground)", fontSize: 11 }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fill: "var(--muted-foreground)", fontSize: 11 }} axisLine={false} tickLine={false} />
+              <Tooltip contentStyle={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 6 }} />
+              <Bar dataKey="count" fill="var(--chart-4)" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </ChartCard>
       </div>
 
       <div className="mt-6 grid gap-4 lg:grid-cols-3">

@@ -18,6 +18,7 @@ import { Route as IncidentsRouteImport } from './routes/incidents'
 import { Route as FloorPlansRouteImport } from './routes/floor-plans'
 import { Route as CommanderRouteImport } from './routes/commander'
 import { Route as BuildingsRouteImport } from './routes/buildings'
+import { Route as BuildingInputRouteImport } from './routes/building-input'
 import { Route as IndexRouteImport } from './routes/index'
 
 const VulnerabilityRoute = VulnerabilityRouteImport.update({
@@ -65,6 +66,11 @@ const BuildingsRoute = BuildingsRouteImport.update({
   path: '/buildings',
   getParentRoute: () => rootRouteImport,
 } as any)
+const BuildingInputRoute = BuildingInputRouteImport.update({
+  id: '/building-input',
+  path: '/building-input',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -73,6 +79,7 @@ const IndexRoute = IndexRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/building-input': typeof BuildingInputRoute
   '/buildings': typeof BuildingsRoute
   '/commander': typeof CommanderRoute
   '/floor-plans': typeof FloorPlansRoute
@@ -85,6 +92,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/building-input': typeof BuildingInputRoute
   '/buildings': typeof BuildingsRoute
   '/commander': typeof CommanderRoute
   '/floor-plans': typeof FloorPlansRoute
@@ -98,6 +106,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/building-input': typeof BuildingInputRoute
   '/buildings': typeof BuildingsRoute
   '/commander': typeof CommanderRoute
   '/floor-plans': typeof FloorPlansRoute
@@ -112,6 +121,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/building-input'
     | '/buildings'
     | '/commander'
     | '/floor-plans'
@@ -124,6 +134,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/building-input'
     | '/buildings'
     | '/commander'
     | '/floor-plans'
@@ -136,6 +147,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/building-input'
     | '/buildings'
     | '/commander'
     | '/floor-plans'
@@ -149,6 +161,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  BuildingInputRoute: typeof BuildingInputRoute
   BuildingsRoute: typeof BuildingsRoute
   CommanderRoute: typeof CommanderRoute
   FloorPlansRoute: typeof FloorPlansRoute
@@ -225,6 +238,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof BuildingsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/building-input': {
+      id: '/building-input'
+      path: '/building-input'
+      fullPath: '/building-input'
+      preLoaderRoute: typeof BuildingInputRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -237,6 +257,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  BuildingInputRoute: BuildingInputRoute,
   BuildingsRoute: BuildingsRoute,
   CommanderRoute: CommanderRoute,
   FloorPlansRoute: FloorPlansRoute,
