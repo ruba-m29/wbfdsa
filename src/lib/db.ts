@@ -8,7 +8,13 @@ export type BuildingType =
   | "School"
   | "University"
   | "Data Center"
-  | "Mixed Use";
+  | "Mixed Use"
+  | "Residential"
+  | "Commercial"
+  | "Industrial"
+  | "Public Facility";
+
+export type AssessmentStatus = "draft" | "submitted";
 
 export interface Building {
   id?: number;
@@ -17,6 +23,7 @@ export interface Building {
   ownerName?: string;
   type: BuildingType | string;
   functionalCategory?: string;
+  occupancyType?: string;
   floors: number;
   buildingHeight?: number;
   totalArea: number;
@@ -34,6 +41,20 @@ export interface Building {
   longitude?: number;
   constructionType: string;
   fireResistanceRating: string;
+  // Structural details
+  numberOfLifts?: number;
+  numberOfStaircases?: number;
+  numberOfWindows?: number;
+  adjacentBuildingDistance?: number;
+  peoplePerFloor?: number;
+  // Assessment info
+  assessmentDate?: string;
+  assessorName?: string;
+  remarks?: string;
+  status?: AssessmentStatus;
+  // CAD files stored as names (actual files in browser storage)
+  cadFiles?: string[];
+  cadFileCategories?: Record<string, string>;
   createdAt: number;
 }
 
@@ -120,8 +141,8 @@ class FDVADatabase extends Dexie {
 
   constructor() {
     super("fdva-db");
-    this.version(1).stores({
-      buildings: "++id, name, type",
+    this.version(2).stores({
+      buildings: "++id, name, type, status",
       floors: "++id, buildingId, level",
       zones: "++id, buildingId, floorId, zoneId",
       personnel: "++id, employeeId, department",
