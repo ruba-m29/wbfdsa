@@ -1,4 +1,4 @@
-import { db, type BuildingType, type ZoneType } from "./db";
+import { db, type BuildingType, type ZoneType, logActivity } from "./db";
 
 const buildingSeeds: Array<{
   name: string;
@@ -122,4 +122,108 @@ export async function seedIfEmpty() {
     { timestamp: now - 7200000, kind: "building", message: "Crestline Galleria added to registry" },
     { timestamp: now - 10800000, kind: "occupancy", message: "Occupancy refreshed for Saint Clare Medical Center" },
   ]);
+
+  // Seed Infosystem portfolio
+  await seedInfosystemBuildings();
+}
+
+interface City {
+  name: string;
+  lat: number;
+  lng: number;
+  count: number;
+}
+
+const CITIES: City[] = [
+  { name: "Bengaluru", lat: 12.9716, lng: 77.5946, count: 4 },
+  { name: "Pune", lat: 18.5204, lng: 73.8567, count: 3 },
+  { name: "Hyderabad", lat: 17.3850, lng: 78.4867, count: 3 },
+  { name: "Chennai", lat: 13.0827, lng: 80.2707, count: 3 },
+  { name: "Mumbai", lat: 19.0760, lng: 72.8777, count: 3 },
+  { name: "Noida", lat: 28.5355, lng: 77.3910, count: 2 },
+  { name: "Gurugram", lat: 28.4595, lng: 77.0266, count: 2 },
+  { name: "Kolkata", lat: 22.5726, lng: 88.3639, count: 2 },
+  { name: "Ahmedabad", lat: 23.0225, lng: 72.5714, count: 2 },
+  { name: "Jaipur", lat: 26.9124, lng: 75.7873, count: 2 },
+  { name: "Kochi", lat: 9.9312, lng: 76.2673, count: 2 },
+  { name: "Coimbatore", lat: 11.0168, lng: 76.9558, count: 2 }
+];
+
+export async function seedInfosystemBuildings() {
+  const allBuildings = await db.buildings.toArray();
+  const count = allBuildings.filter(b => b.ownerName === "Infosystem").length;
+  if (count > 0) return; // already seeded
+
+  const now = Date.now();
+  let buildingIndex = 1;
+
+  for (const city of CITIES) {
+    for (let c = 0; c < city.count; c++) {
+      const floors = 3 + (buildingIndex % 7); // 3 to 9 floors
+      const totalArea = 8000 + (buildingIndex % 5) * 6000; // 8000 to 32000
+      
+      const offsetLat = (c - (city.count - 1) / 2) * 0.015 + (Math.random() - 0.5) * 0.003;
+      const offsetLng = (c - (city.count - 1) / 2) * 0.015 + (Math.random() - 0.5) * 0.003;
+
+      const type: BuildingType = buildingIndex % 10 === 0 ? "Data Center" : buildingIndex % 7 === 0 ? "Mixed Use" : "Office";
+      const bName = `Infosystem Campus Block ${String.fromCharCode(65 + c)}${buildingIndex}`;
+      const bAddress = `Sector ${12 + c}, Tech Zone, ${city.name}`;
+
+      const buildingId = await db.buildings.add({
+        name: bName,
+        ownerName: "Infosystem",
+        type,
+        floors,
+        totalArea,
+        constructionType: "Type I — Non-combustible",
+        fireResistanceRating: buildingIndex % 3 === 0 ? "3-hour" : "2-hour",
+        address: bAddress,
+        city: city.name,
+        state: city.name === "Noida" ? "Uttar Pradesh" : city.name === "Gurugram" ? "Haryana" : "State",
+        country: "India",
+        latitude: city.lat + offsetLat,
+        longitude: city.lng + offsetLng,
+        createdAt: now - buildingIndex * 3600000,
+      });
+
+      // Seed floors and zones for each building
+      const floorCount = Math.min(floors, 3); // cap floors per building for speed
+      for (let lvl = 1; lvl <= floorCount; lvl++) {
+        const totalExits = lvl === 1 ? 4 : 3;
+        const floorId = await db.floors.add({
+          buildingId,
+          level: lvl,
+          name: lvl === 1 ? "Ground Floor" : `Floor ${lvl}`,
+          totalExits,
+          availableExits: totalExits,
+          blockedExits: 0,
+          elevatorWorking: true,
+        });
+
+        // Add 3 zones per floor
+        const zones = ["Lobby", "Office", "Corridor"];
+        for (let zi = 0; zi < zones.length; zi++) {
+          const ztype = zones[zi] as ZoneType;
+          await db.zones.add({
+            buildingId,
+            floorId,
+            zoneId: `IS-${buildingIndex}-F${lvl}-Z${zi + 1}`,
+            name: `${ztype} ${zi + 1}`,
+            type: ztype,
+            area: 80 + zi * 30,
+            occupancy: Math.floor(10 + Math.random() * 40),
+            specialNeeds: Math.random() < 0.2 ? Math.floor(Math.random() * 3) : 0,
+            x: 10 + zi * 30,
+            y: 20,
+            w: 25,
+            h: 60,
+          });
+        }
+      }
+
+      buildingIndex++;
+    }
+  }
+
+  await logActivity("building", `Seeded 30 Infosystem buildings across 12 cities.`);
 }

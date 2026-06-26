@@ -1,14 +1,16 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback } from "react";
 import {
   Upload, MapPin, Building2, FileText, CheckCircle2, Search, ArrowUpDown,
   Download, FileSpreadsheet, HeartPulse, Bus, Church, Server, Dumbbell,
   Car, Landmark, Store, Wheat, Palette, Building, X, Eye, RotateCcw,
   Save, Send, AlertCircle, Calendar, User, MessageSquare, Trash2,
-  FileImage, FileArchive, Loader2
+  FileImage, FileArchive, Loader2, Info, Sliders, Users, Flame, Zap, Ruler, AlertTriangle, PhoneCall
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
-import { db, logActivity, type Building as BuildingRecord } from "@/lib/db";
+import { logActivity } from "@/lib/db";
+import { createBuildingOnService } from "@/services/dbSync";
+import { motion, AnimatePresence } from "framer-motion";
 
 export const Route = createFileRoute("/building-input")({
   head: () => ({ meta: [{ title: "Building Assessment Input — WB-FDVA" }] }),
@@ -70,36 +72,71 @@ interface UploadedFile {
 }
 
 interface FormData {
-  // Building Info
+  // General Info
   buildingName: string;
   buildingId: string;
   ownerName: string;
-  buildingType: string;
-  functionalCategory: string;
-  occupancyType: string;
-  numberOfFloors: string;
-  buildingHeight: string;
-  builtUpArea: string;
-  yearOfConstruction: string;
-  // Address
   addressLine1: string;
   addressLine2: string;
   city: string;
   state: string;
   country: string;
   postalCode: string;
-  // Map
   latitude: string;
   longitude: string;
-  // Structural
+  contactNumber: string;
+  email: string;
+  
+  // Building Details
+  buildingType: string;
+  functionalCategory: string;
+  builtUpArea: string;
+  yearOfConstruction: string;
+  buildingHeight: string;
+  constructionType: string;
+  fireResistanceRating: string;
+
+  // Occupancy Details
+  occupancyType: string;
+  numberOfFloors: string;
   peoplePerFloor: string;
+  averageDailyOccupants: string;
+
+  // Fire Protection Systems
+  sprinklerSystem: string;
+  fireAlarmSystem: string;
+  smokeDetectors: string;
+  wetRisers: string;
+  hoseReels: string;
+  fireExtinguishersCount: string;
+
+  // Utilities
+  primaryPower: string;
+  backupGenerator: string;
+  gasShutoff: string;
+  waterSupply: string;
+  electricalRoomLoc: string;
+
+  // Structural Information
   numberOfLifts: string;
   numberOfStaircases: string;
   numberOfWindows: string;
   adjacentBuildingDistance: string;
-  // Assessment
+  mainConstructionMaterial: string;
+  roofConstructionType: string;
+
+  // Hazardous Materials
+  hazardousMaterialsPresent: string;
+  flammableLiquidsQty: string;
+  gasCylindersCount: string;
+  hazardStorageLoc: string;
+  msdsAvailable: string;
+
+  // Emergency Information
   assessmentDate: string;
   assessorName: string;
+  emergencyContactName: string;
+  emergencyContactPhone: string;
   remarks: string;
 }
 
@@ -108,18 +145,32 @@ interface ValidationErrors {
 }
 
 const initialFormData: FormData = {
-  buildingName: "", buildingId: "", ownerName: "", buildingType: "", functionalCategory: "",
-  occupancyType: "", numberOfFloors: "", buildingHeight: "", builtUpArea: "", yearOfConstruction: "",
+  buildingName: "", buildingId: "", ownerName: "",
   addressLine1: "", addressLine2: "", city: "", state: "", country: "", postalCode: "",
-  latitude: "", longitude: "",
-  peoplePerFloor: "", numberOfLifts: "", numberOfStaircases: "", numberOfWindows: "", adjacentBuildingDistance: "",
-  assessmentDate: new Date().toISOString().slice(0, 10), assessorName: "", remarks: "",
+  latitude: "", longitude: "", contactNumber: "", email: "",
+  
+  buildingType: "", functionalCategory: "", builtUpArea: "", yearOfConstruction: "", buildingHeight: "",
+  constructionType: "Type I — Non-combustible", fireResistanceRating: "2-hour",
+  
+  occupancyType: "", numberOfFloors: "", peoplePerFloor: "", averageDailyOccupants: "",
+  
+  sprinklerSystem: "No", fireAlarmSystem: "No", smokeDetectors: "No", wetRisers: "No", hoseReels: "No", fireExtinguishersCount: "",
+  
+  primaryPower: "Grid", backupGenerator: "No", gasShutoff: "No", waterSupply: "Municipal", electricalRoomLoc: "",
+  
+  numberOfLifts: "", numberOfStaircases: "", numberOfWindows: "", adjacentBuildingDistance: "",
+  mainConstructionMaterial: "Concrete", roofConstructionType: "Concrete Slab",
+  
+  hazardousMaterialsPresent: "No", flammableLiquidsQty: "", gasCylindersCount: "", hazardStorageLoc: "", msdsAvailable: "No",
+  
+  assessmentDate: new Date().toISOString().slice(0, 10), assessorName: "",
+  emergencyContactName: "", emergencyContactPhone: "", remarks: "",
 };
 
 // ── Main Page ──────────────────────────────────────────────────────────────────
 
 function BuildingInputPage() {
-  const [activeTab, setActiveTab] = useState("building");
+  const [activeTab, setActiveTab] = useState("general");
   const [formData, setFormData] = useState<FormData>(initialFormData);
   const [errors, setErrors] = useState<ValidationErrors>({});
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
@@ -153,7 +204,7 @@ function BuildingInputPage() {
     return Object.keys(e).length === 0;
   };
 
-  const buildRecord = (status: "draft" | "submitted"): Omit<BuildingRecord, "id"> => ({
+  const buildRecord = (status: "draft" | "submitted"): any => ({
     name: formData.buildingName,
     buildingId: formData.buildingId || undefined,
     ownerName: formData.ownerName || undefined,
@@ -164,6 +215,8 @@ function BuildingInputPage() {
     buildingHeight: Number(formData.buildingHeight) || undefined,
     totalArea: Number(formData.builtUpArea) || 0,
     yearOfConstruction: Number(formData.yearOfConstruction) || undefined,
+    contactNumber: formData.contactNumber || undefined,
+    email: formData.email || undefined,
     address: [formData.addressLine1, formData.addressLine2, formData.city, formData.state, formData.country, formData.postalCode].filter(Boolean).join(", "),
     addressLine1: formData.addressLine1 || undefined,
     addressLine2: formData.addressLine2 || undefined,
@@ -173,15 +226,42 @@ function BuildingInputPage() {
     pincode: formData.postalCode || undefined,
     latitude: Number(formData.latitude) || undefined,
     longitude: Number(formData.longitude) || undefined,
-    constructionType: "Standard",
-    fireResistanceRating: "Not Rated",
+    constructionType: formData.constructionType,
+    fireResistanceRating: formData.fireResistanceRating,
+    
+    // Additional synced fields
+    sprinklerSystem: formData.sprinklerSystem,
+    fireAlarmSystem: formData.fireAlarmSystem,
+    smokeDetectors: formData.smokeDetectors,
+    wetRisers: formData.wetRisers,
+    hoseReels: formData.hoseReels,
+    fireExtinguishersCount: Number(formData.fireExtinguishersCount) || 0,
+    
+    primaryPower: formData.primaryPower,
+    backupGenerator: formData.backupGenerator,
+    gasShutoff: formData.gasShutoff,
+    waterSupply: formData.waterSupply,
+    electricalRoomLoc: formData.electricalRoomLoc || undefined,
+    
     numberOfLifts: Number(formData.numberOfLifts) || undefined,
     numberOfStaircases: Number(formData.numberOfStaircases) || undefined,
     numberOfWindows: Number(formData.numberOfWindows) || undefined,
     adjacentBuildingDistance: Number(formData.adjacentBuildingDistance) || undefined,
     peoplePerFloor: Number(formData.peoplePerFloor) || undefined,
+    averageDailyOccupants: Number(formData.averageDailyOccupants) || undefined,
+    mainConstructionMaterial: formData.mainConstructionMaterial,
+    roofConstructionType: formData.roofConstructionType,
+    
+    hazardousMaterialsPresent: formData.hazardousMaterialsPresent,
+    flammableLiquidsQty: Number(formData.flammableLiquidsQty) || undefined,
+    gasCylindersCount: Number(formData.gasCylindersCount) || undefined,
+    hazardStorageLoc: formData.hazardStorageLoc || undefined,
+    msdsAvailable: formData.msdsAvailable,
+
     assessmentDate: formData.assessmentDate || undefined,
     assessorName: formData.assessorName || undefined,
+    emergencyContactName: formData.emergencyContactName || undefined,
+    emergencyContactPhone: formData.emergencyContactPhone || undefined,
     remarks: formData.remarks || undefined,
     status,
     cadFiles: uploadedFiles.filter(f => f.status === "complete").map(f => f.file.name),
@@ -193,10 +273,11 @@ function BuildingInputPage() {
     setSaving(true);
     try {
       const record = buildRecord("draft");
-      await db.buildings.add(record as BuildingRecord);
+      await createBuildingOnService(record);
       await logActivity("building", `Draft saved: ${formData.buildingName || "Untitled"}`);
       showToast("✅ Draft saved successfully!");
-    } catch {
+    } catch (err) {
+      console.error(err);
       showToast("❌ Error saving draft");
     }
     setSaving(false);
@@ -210,11 +291,12 @@ function BuildingInputPage() {
     setSaving(true);
     try {
       const record = buildRecord("submitted");
-      await db.buildings.add(record as BuildingRecord);
+      await createBuildingOnService(record);
       await logActivity("building", `Assessment submitted: ${formData.buildingName}`);
       setSubmitSuccess(true);
       showToast("✅ Assessment submitted successfully!");
-    } catch {
+    } catch (err) {
+      console.error(err);
       showToast("❌ Error submitting assessment");
     }
     setSaving(false);
@@ -225,7 +307,7 @@ function BuildingInputPage() {
     setUploadedFiles([]);
     setErrors({});
     setSubmitSuccess(false);
-    setActiveTab("building");
+    setActiveTab("general");
     showToast("🔄 Form reset");
   };
 
@@ -249,11 +331,15 @@ function BuildingInputPage() {
   }
 
   const TABS = [
-    { id: "building", label: "Building Info", icon: Building2 },
-    { id: "address", label: "Address & Map", icon: MapPin },
-    { id: "cad", label: "CAD Upload", icon: Upload },
-    { id: "assessment", label: "Assessment", icon: Calendar },
-    { id: "review", label: "Review & Submit", icon: FileText },
+    { id: "general", label: "General Information", icon: Info },
+    { id: "details", label: "Building Details", icon: Sliders },
+    { id: "occupancy", label: "Occupancy Details", icon: Users },
+    { id: "fireSystems", label: "Fire Protection Systems", icon: Flame },
+    { id: "utilities", label: "Utilities", icon: Zap },
+    { id: "structural", label: "Structural Information", icon: Ruler },
+    { id: "hazardous", label: "Hazardous Materials", icon: AlertTriangle },
+    { id: "emergency", label: "Emergency Information", icon: PhoneCall },
+    { id: "documents", label: "Documents", icon: Upload },
   ];
 
   return (
@@ -268,7 +354,7 @@ function BuildingInputPage() {
       {/* Preview Modal */}
       {showPreview && <PreviewModal formData={formData} files={uploadedFiles} onClose={() => setShowPreview(false)} />}
 
-      <div className="grid gap-6 lg:grid-cols-[260px_1fr]">
+      <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
         {/* Sidebar Tabs */}
         <nav className="flex flex-row lg:flex-col gap-2 overflow-x-auto lg:overflow-visible pb-2 lg:pb-0">
           {TABS.map((tab) => (
@@ -278,37 +364,59 @@ function BuildingInputPage() {
 
         {/* Main Content */}
         <div className="min-w-0 space-y-4">
-          <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
-            {activeTab === "building" && (
-              <BuildingInfoForm formData={formData} errors={errors} updateField={updateField} onNext={() => setActiveTab("address")} />
-            )}
-            {activeTab === "address" && (
-              <AddressMapForm formData={formData} errors={errors} updateField={updateField} onNext={() => setActiveTab("cad")} />
-            )}
-            {activeTab === "cad" && (
-              <CADUploadForm files={uploadedFiles} setFiles={setUploadedFiles} onNext={() => setActiveTab("assessment")} />
-            )}
-            {activeTab === "assessment" && (
-              <AssessmentInfoForm formData={formData} errors={errors} updateField={updateField} onNext={() => setActiveTab("review")} />
-            )}
-            {activeTab === "review" && (
-              <ReviewSection formData={formData} files={uploadedFiles} />
-            )}
+          <div className="rounded-xl border border-border bg-card p-6 shadow-sm min-h-[450px]">
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={activeTab}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.15 }}
+              >
+                {activeTab === "general" && (
+                  <GeneralInfoForm formData={formData} errors={errors} updateField={updateField} onNext={() => setActiveTab("details")} />
+                )}
+                {activeTab === "details" && (
+                  <BuildingDetailsForm formData={formData} errors={errors} updateField={updateField} onNext={() => setActiveTab("occupancy")} />
+                )}
+                {activeTab === "occupancy" && (
+                  <OccupancyDetailsForm formData={formData} errors={errors} updateField={updateField} onNext={() => setActiveTab("fireSystems")} />
+                )}
+                {activeTab === "fireSystems" && (
+                  <FireSystemsForm formData={formData} errors={errors} updateField={updateField} onNext={() => setActiveTab("utilities")} />
+                )}
+                {activeTab === "utilities" && (
+                  <UtilitiesForm formData={formData} errors={errors} updateField={updateField} onNext={() => setActiveTab("structural")} />
+                )}
+                {activeTab === "structural" && (
+                  <StructuralInfoForm formData={formData} errors={errors} updateField={updateField} onNext={() => setActiveTab("hazardous")} />
+                )}
+                {activeTab === "hazardous" && (
+                  <HazardousMaterialsForm formData={formData} errors={errors} updateField={updateField} onNext={() => setActiveTab("emergency")} />
+                )}
+                {activeTab === "emergency" && (
+                  <EmergencyInfoForm formData={formData} errors={errors} updateField={updateField} onNext={() => setActiveTab("documents")} />
+                )}
+                {activeTab === "documents" && (
+                  <CADUploadForm files={uploadedFiles} setFiles={setUploadedFiles} />
+                )}
+              </motion.div>
+            </AnimatePresence>
           </div>
 
           {/* Action Buttons Bar */}
           <div className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card p-4 shadow-sm">
-            <button onClick={handleSaveDraft} disabled={saving} className="inline-flex items-center gap-2 rounded-md border border-border bg-secondary px-4 py-2 text-sm font-semibold hover:bg-secondary/80 disabled:opacity-50">
+            <button onClick={handleSaveDraft} disabled={saving} className="inline-flex items-center gap-2 rounded-md border border-border bg-secondary px-4 py-2 text-sm font-semibold hover:bg-secondary/80 disabled:opacity-50 transition-all hover:scale-[1.02]">
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Save Draft
             </button>
-            <button onClick={handleSubmit} disabled={saving} className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-50 shadow-sm">
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} Submit
+            <button onClick={handleSubmit} disabled={saving} className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-50 shadow-sm transition-all hover:scale-[1.02]">
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} Submit Assessment
             </button>
-            <button onClick={handleReset} className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-4 py-2 text-sm font-semibold hover:bg-secondary">
-              <RotateCcw className="h-4 w-4" /> Reset
+            <button onClick={handleReset} className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-4 py-2 text-sm font-semibold hover:bg-secondary transition-all hover:scale-[1.02]">
+              <RotateCcw className="h-4 w-4" /> Reset Form
             </button>
-            <button onClick={() => setShowPreview(true)} className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-4 py-2 text-sm font-semibold hover:bg-secondary ml-auto">
-              <Eye className="h-4 w-4" /> Preview
+            <button onClick={() => setShowPreview(true)} className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-4 py-2 text-sm font-semibold hover:bg-secondary ml-auto transition-all hover:scale-[1.02]">
+              <Eye className="h-4 w-4" /> Live Preview
             </button>
           </div>
         </div>
@@ -323,8 +431,8 @@ function TabButton({ active, onClick, icon: Icon, label }: { active: boolean; on
   return (
     <button
       onClick={onClick}
-      className={`flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors whitespace-nowrap ${
-        active ? "bg-primary text-primary-foreground shadow-sm" : "hover:bg-secondary text-muted-foreground hover:text-foreground"
+      className={`flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-all whitespace-nowrap ${
+        active ? "bg-primary text-primary-foreground shadow-sm scale-[1.01]" : "hover:bg-secondary text-muted-foreground hover:text-foreground hover:translate-x-1"
       }`}
     >
       <Icon className="h-4 w-4 shrink-0" />
@@ -333,14 +441,25 @@ function TabButton({ active, onClick, icon: Icon, label }: { active: boolean; on
   );
 }
 
-// ── Section 1: Building Information ────────────────────────────────────────────
+// ── Tab 1: General Information ────────────────────────────────────────────
 
-function BuildingInfoForm({ formData, errors, updateField, onNext }: { formData: FormData; errors: ValidationErrors; updateField: (f: keyof FormData, v: string) => void; onNext: () => void }) {
+function GeneralInfoForm({ formData, errors, updateField, onNext }: { formData: FormData; errors: ValidationErrors; updateField: (f: keyof FormData, v: string) => void; onNext: () => void }) {
+  const [mapSearch, setMapSearch] = useState("");
+  const [mapLoaded, setMapLoaded] = useState(!!(formData.latitude && formData.longitude));
+
+  const handleSearchLocation = () => {
+    const lat = (20 + Math.random() * 10).toFixed(6);
+    const lng = (72 + Math.random() * 10).toFixed(6);
+    updateField("latitude", lat);
+    updateField("longitude", lng);
+    setMapLoaded(true);
+  };
+
   return (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
+    <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-semibold">Building Information</h2>
-        <p className="text-sm text-muted-foreground">General details about the structure, ownership, and classification.</p>
+        <h2 className="text-lg font-semibold">General Information</h2>
+        <p className="text-sm text-muted-foreground">General details about the structure, ownership, and geographical position.</p>
       </div>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <Field label="Building Name *" error={errors.buildingName}>
@@ -352,6 +471,107 @@ function BuildingInfoForm({ formData, errors, updateField, onNext }: { formData:
         <Field label="Owner Name">
           <Input value={formData.ownerName} onChange={v => updateField("ownerName", v)} placeholder="Property owner" />
         </Field>
+        <Field label="Contact Number">
+          <Input value={formData.contactNumber} onChange={v => updateField("contactNumber", v)} placeholder="Owner or office contact" />
+        </Field>
+        <Field label="Email Address">
+          <Input type="email" value={formData.email} onChange={v => updateField("email", v)} placeholder="contact@building.com" />
+        </Field>
+      </div>
+
+      <div className="pt-4 border-t border-border">
+        <h3 className="text-base font-semibold mb-4">Location & Address Details</h3>
+        <div className="grid gap-6 lg:grid-cols-2">
+          {/* Address Fields */}
+          <div className="space-y-4">
+            <Field label="Address Line 1 *" error={errors.addressLine1}>
+              <Input value={formData.addressLine1} onChange={v => updateField("addressLine1", v)} placeholder="Street address" error={!!errors.addressLine1} />
+            </Field>
+            <Field label="Address Line 2">
+              <Input value={formData.addressLine2} onChange={v => updateField("addressLine2", v)} placeholder="Apartment, suite, etc." />
+            </Field>
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="City *" error={errors.city}>
+                <Input value={formData.city} onChange={v => updateField("city", v)} placeholder="City" error={!!errors.city} />
+              </Field>
+              <Field label="State">
+                <Input value={formData.state} onChange={v => updateField("state", v)} placeholder="State" />
+              </Field>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="Country">
+                <Input value={formData.country} onChange={v => updateField("country", v)} placeholder="Country" />
+              </Field>
+              <Field label="Postal Code">
+                <Input value={formData.postalCode} onChange={v => updateField("postalCode", v)} placeholder="Pincode" />
+              </Field>
+            </div>
+          </div>
+
+          {/* Map Section */}
+          <div className="space-y-4">
+            <Field label="Search Location">
+              <div className="flex gap-2">
+                <Input value={mapSearch} onChange={setMapSearch} placeholder="Search for a place..." />
+                <button onClick={handleSearchLocation} className="shrink-0 rounded-md bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground hover:opacity-90">
+                  <Search className="h-4 w-4" />
+                </button>
+              </div>
+            </Field>
+            <div className="h-44 w-full rounded-lg border border-border bg-secondary/30 flex items-center justify-center relative overflow-hidden">
+              {mapLoaded ? (
+                <div className="absolute inset-0 bg-gradient-to-br from-blue-100 to-green-100 dark:from-blue-900/30 dark:to-green-900/30 flex items-center justify-center">
+                  <div className="text-center space-y-2">
+                    <MapPin className="h-10 w-10 text-primary mx-auto animate-bounce" />
+                    <p className="text-sm font-medium">Location pinned</p>
+                    <p className="text-xs text-muted-foreground">{formData.latitude}, {formData.longitude}</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center space-y-3">
+                  <MapPin className="h-10 w-10 text-muted-foreground/50 mx-auto" />
+                  <p className="text-sm text-muted-foreground">Search location or enter coordinates</p>
+                  <button onClick={handleSearchLocation} className="rounded-md bg-background/80 backdrop-blur px-3 py-1.5 text-xs font-semibold shadow-sm border border-border hover:bg-background">
+                    Place Marker
+                  </button>
+                </div>
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="Latitude">
+                <Input value={formData.latitude} onChange={v => updateField("latitude", v)} placeholder="Auto-fill" />
+              </Field>
+              <Field label="Longitude">
+                <Input value={formData.longitude} onChange={v => updateField("longitude", v)} placeholder="Auto-fill" />
+              </Field>
+            </div>
+            {formData.latitude && formData.longitude && (
+              <button onClick={() => { updateField("latitude", ""); updateField("longitude", ""); setMapLoaded(false); }}
+                className="text-xs text-risk-red hover:underline block">
+                Clear Coordinates
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="flex justify-end pt-4 border-t border-border">
+        <button onClick={onNext} className="rounded-md bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground hover:opacity-90">Next: Building Details →</button>
+      </div>
+    </div>
+  );
+}
+
+// ── Tab 2: Building Details ────────────────────────────────────────────
+
+function BuildingDetailsForm({ formData, errors, updateField, onNext }: { formData: FormData; errors: ValidationErrors; updateField: (f: keyof FormData, v: string) => void; onNext: () => void }) {
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-lg font-semibold">Building Details</h2>
+        <p className="text-sm text-muted-foreground">Structure dimension, classification type, and fire resistance parameters.</p>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <Field label="Building Type *" error={errors.buildingType}>
           <Select value={formData.buildingType} onChange={v => updateField("buildingType", v)} options={BUILDING_TYPES} placeholder="Select type..." error={!!errors.buildingType} />
         </Field>
@@ -365,157 +585,252 @@ function BuildingInfoForm({ formData, errors, updateField, onNext }: { formData:
             ))}
           </select>
         </Field>
-        <Field label="Occupancy Type">
-          <Select value={formData.occupancyType} onChange={v => updateField("occupancyType", v)} options={OCCUPANCY_TYPES} placeholder="Select occupancy..." />
-        </Field>
-        <Field label="Number of Floors *" error={errors.numberOfFloors}>
-          <Input type="number" value={formData.numberOfFloors} onChange={v => updateField("numberOfFloors", v)} placeholder="e.g. 12" error={!!errors.numberOfFloors} />
-        </Field>
-        <Field label="Building Height (m)">
-          <Input type="number" value={formData.buildingHeight} onChange={v => updateField("buildingHeight", v)} placeholder="Height in meters" />
-        </Field>
         <Field label="Built-up Area (sq.m) *" error={errors.builtUpArea}>
           <Input type="number" value={formData.builtUpArea} onChange={v => updateField("builtUpArea", v)} placeholder="Total area" error={!!errors.builtUpArea} />
         </Field>
         <Field label="Year of Construction">
           <Input type="number" value={formData.yearOfConstruction} onChange={v => updateField("yearOfConstruction", v)} placeholder="e.g. 2015" />
         </Field>
-      </div>
-
-      {/* Structural Details Sub-section */}
-      <div className="pt-4 border-t border-border">
-        <h3 className="text-base font-semibold mb-4">Structural Details</h3>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <Field label="People per Floor">
-            <Input type="number" value={formData.peoplePerFloor} onChange={v => updateField("peoplePerFloor", v)} placeholder="Avg. occupancy" />
-          </Field>
-          <Field label="Number of Lifts">
-            <Input type="number" value={formData.numberOfLifts} onChange={v => updateField("numberOfLifts", v)} placeholder="Total lifts" />
-          </Field>
-          <Field label="Number of Staircases">
-            <Input type="number" value={formData.numberOfStaircases} onChange={v => updateField("numberOfStaircases", v)} placeholder="Total staircases" />
-          </Field>
-          <Field label="Number of Windows">
-            <Input type="number" value={formData.numberOfWindows} onChange={v => updateField("numberOfWindows", v)} placeholder="Total windows" />
-          </Field>
-          <Field label="Adjacent Building Distance (m)">
-            <Input type="number" value={formData.adjacentBuildingDistance} onChange={v => updateField("adjacentBuildingDistance", v)} placeholder="Distance in meters" />
-          </Field>
-        </div>
+        <Field label="Building Height (m)">
+          <Input type="number" value={formData.buildingHeight} onChange={v => updateField("buildingHeight", v)} placeholder="Height in meters" />
+        </Field>
+        <Field label="Construction Type">
+          <Select value={formData.constructionType} onChange={v => updateField("constructionType", v)} options={["Type I — Non-combustible", "Type II — Steel", "Type III — Masonry", "Type IV — Heavy Timber", "Type V — Wood Frame"]} />
+        </Field>
+        <Field label="Fire Resistance Rating">
+          <Select value={formData.fireResistanceRating} onChange={v => updateField("fireResistanceRating", v)} options={["Not Rated", "1-hour", "2-hour", "3-hour", "4-hour"]} />
+        </Field>
       </div>
 
       <AdditionalCategoriesTable />
 
       <div className="flex justify-end pt-4 border-t border-border">
-        <button onClick={onNext} className="rounded-md bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground hover:opacity-90">Next: Address & Map →</button>
+        <button onClick={onNext} className="rounded-md bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground hover:opacity-90">Next: Occupancy Details →</button>
       </div>
     </div>
   );
 }
 
-// ── Section 2: Address & Google Map ────────────────────────────────────────────
+// ── Tab 3: Occupancy Details ───────────────────────────────────────────
 
-function AddressMapForm({ formData, errors, updateField, onNext }: { formData: FormData; errors: ValidationErrors; updateField: (f: keyof FormData, v: string) => void; onNext: () => void }) {
-  const [mapSearch, setMapSearch] = useState("");
-  const [mapLoaded, setMapLoaded] = useState(false);
-
-  const handleSearchLocation = () => {
-    // Simulate geocoding — in production, integrate with a geocoding API
-    const lat = (20 + Math.random() * 10).toFixed(6);
-    const lng = (72 + Math.random() * 10).toFixed(6);
-    updateField("latitude", lat);
-    updateField("longitude", lng);
-    setMapLoaded(true);
-  };
-
+function OccupancyDetailsForm({ formData, errors, updateField, onNext }: { formData: FormData; errors: ValidationErrors; updateField: (f: keyof FormData, v: string) => void; onNext: () => void }) {
   return (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
+    <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-semibold">Address & Location</h2>
-        <p className="text-sm text-muted-foreground">Physical address and geographical coordinates.</p>
+        <h2 className="text-lg font-semibold">Occupancy Details</h2>
+        <p className="text-sm text-muted-foreground">Information regarding daily usage intensity, floor counts, and average populations.</p>
       </div>
-      <div className="grid gap-6 lg:grid-cols-2">
-        {/* Address Fields */}
-        <div className="space-y-4">
-          <Field label="Address Line 1 *" error={errors.addressLine1}>
-            <Input value={formData.addressLine1} onChange={v => updateField("addressLine1", v)} placeholder="Street address" error={!!errors.addressLine1} />
-          </Field>
-          <Field label="Address Line 2">
-            <Input value={formData.addressLine2} onChange={v => updateField("addressLine2", v)} placeholder="Apartment, suite, etc." />
-          </Field>
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="City *" error={errors.city}>
-              <Input value={formData.city} onChange={v => updateField("city", v)} placeholder="City" error={!!errors.city} />
-            </Field>
-            <Field label="State">
-              <Input value={formData.state} onChange={v => updateField("state", v)} placeholder="State" />
-            </Field>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="Country">
-              <Input value={formData.country} onChange={v => updateField("country", v)} placeholder="Country" />
-            </Field>
-            <Field label="Postal Code">
-              <Input value={formData.postalCode} onChange={v => updateField("postalCode", v)} placeholder="Pincode" />
-            </Field>
-          </div>
-        </div>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <Field label="Occupancy Type">
+          <Select value={formData.occupancyType} onChange={v => updateField("occupancyType", v)} options={OCCUPANCY_TYPES} placeholder="Select occupancy..." />
+        </Field>
+        <Field label="Number of Floors *" error={errors.numberOfFloors}>
+          <Input type="number" value={formData.numberOfFloors} onChange={v => updateField("numberOfFloors", v)} placeholder="e.g. 12" error={!!errors.numberOfFloors} />
+        </Field>
+        <Field label="Average Occupants per Floor">
+          <Input type="number" value={formData.peoplePerFloor} onChange={v => updateField("peoplePerFloor", v)} placeholder="Avg. occupancy" />
+        </Field>
+        <Field label="Average Daily Occupants (Total)">
+          <Input type="number" value={formData.averageDailyOccupants} onChange={v => updateField("averageDailyOccupants", v)} placeholder="Total daily occupants" />
+        </Field>
+      </div>
 
-        {/* Map Section */}
-        <div className="space-y-4">
-          <Field label="Search Location">
-            <div className="flex gap-2">
-              <Input value={mapSearch} onChange={setMapSearch} placeholder="Search for a place..." />
-              <button onClick={handleSearchLocation} className="shrink-0 rounded-md bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground hover:opacity-90">
-                <Search className="h-4 w-4" />
-              </button>
-            </div>
-          </Field>
-          <div className="h-56 w-full rounded-lg border border-border bg-secondary/30 flex items-center justify-center relative overflow-hidden">
-            {mapLoaded ? (
-              <div className="absolute inset-0 bg-gradient-to-br from-blue-100 to-green-100 dark:from-blue-900/30 dark:to-green-900/30 flex items-center justify-center">
-                <div className="text-center space-y-2">
-                  <MapPin className="h-10 w-10 text-primary mx-auto animate-bounce" />
-                  <p className="text-sm font-medium">Location pinned</p>
-                  <p className="text-xs text-muted-foreground">{formData.latitude}, {formData.longitude}</p>
-                </div>
-              </div>
-            ) : (
-              <div className="text-center space-y-3">
-                <MapPin className="h-10 w-10 text-muted-foreground/50 mx-auto" />
-                <p className="text-sm text-muted-foreground">Search a location or enter coordinates</p>
-                <button onClick={handleSearchLocation} className="rounded-md bg-background/80 backdrop-blur px-3 py-1.5 text-xs font-semibold shadow-sm border border-border hover:bg-background">
-                  Place Marker
-                </button>
-              </div>
-            )}
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="Latitude">
-              <Input value={formData.latitude} onChange={v => updateField("latitude", v)} placeholder="Auto-fill" />
-            </Field>
-            <Field label="Longitude">
-              <Input value={formData.longitude} onChange={v => updateField("longitude", v)} placeholder="Auto-fill" />
-            </Field>
-          </div>
-          {formData.latitude && formData.longitude && (
-            <button onClick={() => { updateField("latitude", ""); updateField("longitude", ""); setMapLoaded(false); }}
-              className="text-xs text-risk-red hover:underline">
-              Clear Coordinates
-            </button>
-          )}
-        </div>
-      </div>
       <div className="flex justify-end pt-4 border-t border-border">
-        <button onClick={onNext} className="rounded-md bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground hover:opacity-90">Next: CAD Upload →</button>
+        <button onClick={onNext} className="rounded-md bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground hover:opacity-90">Next: Fire Protection Systems →</button>
       </div>
     </div>
   );
 }
 
-// ── Section 3: CAD Drawing Upload ──────────────────────────────────────────────
+// ── Tab 4: Fire Protection Systems ────────────────────────────────────────
 
-function CADUploadForm({ files, setFiles, onNext }: { files: UploadedFile[]; setFiles: React.Dispatch<React.SetStateAction<UploadedFile[]>>; onNext: () => void }) {
+function FireSystemsForm({ formData, updateField, onNext }: { formData: FormData; errors: ValidationErrors; updateField: (f: keyof FormData, v: string) => void; onNext: () => void }) {
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-lg font-semibold">Fire Protection Systems</h2>
+        <p className="text-sm text-muted-foreground">Availability of proactive fire suppression, containment, and notification systems.</p>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <Field label="Sprinkler System">
+          <Select value={formData.sprinklerSystem} onChange={v => updateField("sprinklerSystem", v)} options={["Yes", "No", "Partial"]} />
+        </Field>
+        <Field label="Fire Alarm System">
+          <Select value={formData.fireAlarmSystem} onChange={v => updateField("fireAlarmSystem", v)} options={["Yes", "No", "Partial"]} />
+        </Field>
+        <Field label="Smoke Detectors Installed">
+          <Select value={formData.smokeDetectors} onChange={v => updateField("smokeDetectors", v)} options={["Yes", "No"]} />
+        </Field>
+        <Field label="Wet Risers Connected">
+          <Select value={formData.wetRisers} onChange={v => updateField("wetRisers", v)} options={["Yes", "No"]} />
+        </Field>
+        <Field label="Hose Reels Working">
+          <Select value={formData.hoseReels} onChange={v => updateField("hoseReels", v)} options={["Yes", "No"]} />
+        </Field>
+        <Field label="Fire Extinguishers Count">
+          <Input type="number" value={formData.fireExtinguishersCount} onChange={v => updateField("fireExtinguishersCount", v)} placeholder="Total count on site" />
+        </Field>
+      </div>
+
+      <div className="flex justify-end pt-4 border-t border-border">
+        <button onClick={onNext} className="rounded-md bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground hover:opacity-90">Next: Utilities →</button>
+      </div>
+    </div>
+  );
+}
+
+// ── Tab 5: Utilities ──────────────────────────────────────────────────
+
+function UtilitiesForm({ formData, updateField, onNext }: { formData: FormData; errors: ValidationErrors; updateField: (f: keyof FormData, v: string) => void; onNext: () => void }) {
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-lg font-semibold">Utilities</h2>
+        <p className="text-sm text-muted-foreground">Power grid settings, gas valves, water supply, and switchboards.</p>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <Field label="Primary Power Source">
+          <Select value={formData.primaryPower} onChange={v => updateField("primaryPower", v)} options={["Grid", "Solar", "Generator", "Grid + Solar", "Grid + Generator"]} />
+        </Field>
+        <Field label="Backup Generator Present">
+          <Select value={formData.backupGenerator} onChange={v => updateField("backupGenerator", v)} options={["Yes", "No"]} />
+        </Field>
+        <Field label="Gas Line Shutoff Valve Accessible">
+          <Select value={formData.gasShutoff} onChange={v => updateField("gasShutoff", v)} options={["Yes", "No", "N/A - No Gas Lines"]} />
+        </Field>
+        <Field label="Fire Water Supply Source">
+          <Select value={formData.waterSupply} onChange={v => updateField("waterSupply", v)} options={["Municipal Main", "Borewell", "Dedicated Fire Tank", "Mixed Reservoirs"]} />
+        </Field>
+        <Field label="Electrical Room Location">
+          <Input value={formData.electricalRoomLoc} onChange={v => updateField("electricalRoomLoc", v)} placeholder="e.g. Basement 1, Room B-12" />
+        </Field>
+      </div>
+
+      <div className="flex justify-end pt-4 border-t border-border">
+        <button onClick={onNext} className="rounded-md bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground hover:opacity-90">Next: Structural Information →</button>
+      </div>
+    </div>
+  );
+}
+
+// ── Tab 6: Structural Information ───────────────────────────────────────────
+
+function StructuralInfoForm({ formData, updateField, onNext }: { formData: FormData; errors: ValidationErrors; updateField: (f: keyof FormData, v: string) => void; onNext: () => void }) {
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-lg font-semibold">Structural Information</h2>
+        <p className="text-sm text-muted-foreground">Layout vectors, elevator counts, staircase channels, and window apertures.</p>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <Field label="Number of Lifts">
+          <Input type="number" value={formData.numberOfLifts} onChange={v => updateField("numberOfLifts", v)} placeholder="Total lifts" />
+        </Field>
+        <Field label="Number of Staircases">
+          <Input type="number" value={formData.numberOfStaircases} onChange={v => updateField("numberOfStaircases", v)} placeholder="Total staircases" />
+        </Field>
+        <Field label="Number of Windows">
+          <Input type="number" value={formData.numberOfWindows} onChange={v => updateField("numberOfWindows", v)} placeholder="Total windows" />
+        </Field>
+        <Field label="Adjacent Building Distance (m)">
+          <Input type="number" value={formData.adjacentBuildingDistance} onChange={v => updateField("adjacentBuildingDistance", v)} placeholder="Distance in meters" />
+        </Field>
+        <Field label="Main Construction Material">
+          <Select value={formData.mainConstructionMaterial} onChange={v => updateField("mainConstructionMaterial", v)} options={["Concrete", "Steel Frame", "Concrete & Steel", "Brick Masonry", "Timber / Wood Frame"]} />
+        </Field>
+        <Field label="Roof Construction Type">
+          <Select value={formData.roofConstructionType} onChange={v => updateField("roofConstructionType", v)} options={["Concrete Slab", "Corrugated Metal sheets", "Wooden Deck", "Tile / Slated Roof"]} />
+        </Field>
+      </div>
+
+      <div className="flex justify-end pt-4 border-t border-border">
+        <button onClick={onNext} className="rounded-md bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground hover:opacity-90">Next: Hazardous Materials →</button>
+      </div>
+    </div>
+  );
+}
+
+// ── Tab 7: Hazardous Materials ─────────────────────────────────────────────
+
+function HazardousMaterialsForm({ formData, updateField, onNext }: { formData: FormData; errors: ValidationErrors; updateField: (f: keyof FormData, v: string) => void; onNext: () => void }) {
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-lg font-semibold">Hazardous Materials</h2>
+        <p className="text-sm text-muted-foreground">Inventory of combustible chemicals, fuel reserves, and safety sheets.</p>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <Field label="Hazardous Materials Present">
+          <Select value={formData.hazardousMaterialsPresent} onChange={v => updateField("hazardousMaterialsPresent", v)} options={["No", "Yes"]} />
+        </Field>
+        {formData.hazardousMaterialsPresent === "Yes" && (
+          <>
+            <Field label="Flammable Liquids Quantity (Liters)">
+              <Input type="number" value={formData.flammableLiquidsQty} onChange={v => updateField("flammableLiquidsQty", v)} placeholder="Volume in liters" />
+            </Field>
+            <Field label="Gas Cylinders Count">
+              <Input type="number" value={formData.gasCylindersCount} onChange={v => updateField("gasCylindersCount", v)} placeholder="Total cylinders" />
+            </Field>
+            <Field label="Storage Location Description">
+              <Input value={formData.hazardStorageLoc} onChange={v => updateField("hazardStorageLoc", v)} placeholder="e.g. Storage Room A-3, Back Yard" />
+            </Field>
+            <Field label="MSDS Available on Site">
+              <Select value={formData.msdsAvailable} onChange={v => updateField("msdsAvailable", v)} options={["Yes", "No"]} />
+            </Field>
+          </>
+        )}
+      </div>
+
+      <div className="flex justify-end pt-4 border-t border-border">
+        <button onClick={onNext} className="rounded-md bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground hover:opacity-90">Next: Emergency Information →</button>
+      </div>
+    </div>
+  );
+}
+
+// ── Tab 8: Emergency Information ───────────────────────────────────────────
+
+function EmergencyInfoForm({ formData, errors, updateField, onNext }: { formData: FormData; errors: ValidationErrors; updateField: (f: keyof FormData, v: string) => void; onNext: () => void }) {
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-lg font-semibold flex items-center gap-2"><Calendar className="h-5 w-5 text-primary" /> Emergency & Assessment Info</h2>
+        <p className="text-sm text-muted-foreground">Audit tracking parameters, lead inspector, and emergency contact registries.</p>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Assessment Date">
+          <Input type="date" value={formData.assessmentDate} onChange={v => updateField("assessmentDate", v)} />
+        </Field>
+        <Field label="Assessor Name *" error={errors.assessorName}>
+          <Input value={formData.assessorName} onChange={v => updateField("assessorName", v)} placeholder="Full name of assessor" error={!!errors.assessorName} />
+        </Field>
+        <Field label="Emergency Contact Person">
+          <Input value={formData.emergencyContactName} onChange={v => updateField("emergencyContactName", v)} placeholder="e.g. Chief Fire Warden" />
+        </Field>
+        <Field label="Emergency Contact Phone">
+          <Input value={formData.emergencyContactPhone} onChange={v => updateField("emergencyContactPhone", v)} placeholder="+1 555-0199" />
+        </Field>
+      </div>
+      <Field label="Remarks / Audit Notes">
+        <textarea
+          value={formData.remarks}
+          onChange={e => updateField("remarks", e.target.value)}
+          placeholder="Add any additional notes, observations, or evacuation instructions..."
+          rows={4}
+          className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring resize-none"
+        />
+      </Field>
+
+      <div className="flex justify-end pt-4 border-t border-border">
+        <button onClick={onNext} className="rounded-md bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground hover:opacity-90">Next: Documents & CAD Upload →</button>
+      </div>
+    </div>
+  );
+}
+
+// ── Tab 9: Documents (CAD Upload) ──────────────────────────────────────────────
+
+function CADUploadForm({ files, setFiles }: { files: UploadedFile[]; setFiles: React.Dispatch<React.SetStateAction<UploadedFile[]>> }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
 
@@ -524,7 +839,6 @@ function CADUploadForm({ files, setFiles, onNext }: { files: UploadedFile[]; set
     const newFile: UploadedFile = { file, id, category, progress: 0, status: "uploading" };
     setFiles(prev => [...prev, newFile]);
 
-    // Simulate progress
     let progress = 0;
     const interval = setInterval(() => {
       progress += Math.random() * 30 + 10;
@@ -535,7 +849,7 @@ function CADUploadForm({ files, setFiles, onNext }: { files: UploadedFile[]; set
       } else {
         setFiles(prev => prev.map(f => f.id === id ? { ...f, progress: Math.min(progress, 99) } : f));
       }
-    }, 300);
+    }, 250);
   };
 
   const handleFiles = (fileList: FileList | null) => {
@@ -570,10 +884,10 @@ function CADUploadForm({ files, setFiles, onNext }: { files: UploadedFile[]; set
   };
 
   return (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
+    <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-semibold">CAD Drawing Upload</h2>
-        <p className="text-sm text-muted-foreground">Upload building plans, floor layouts, fire safety diagrams, and exit route maps.</p>
+        <h2 className="text-lg font-semibold">CAD Drawing & Documents Upload</h2>
+        <p className="text-sm text-muted-foreground">Upload building layouts, floor blueprints, fire safety diagrams, and evacuation maps.</p>
       </div>
 
       {/* Drop Zone */}
@@ -589,9 +903,9 @@ function CADUploadForm({ files, setFiles, onNext }: { files: UploadedFile[]; set
         <div className={`h-14 w-14 rounded-full flex items-center justify-center mb-4 transition-colors ${dragOver ? "bg-primary/20" : "bg-primary/10"}`}>
           <Upload className={`h-7 w-7 ${dragOver ? "text-primary animate-bounce" : "text-primary"}`} />
         </div>
-        <h3 className="font-semibold text-base mb-1">Drag & Drop files here</h3>
+        <h3 className="font-semibold text-base mb-1">Drag & Drop drawings here</h3>
         <p className="text-sm text-muted-foreground mb-4">or click to browse your computer</p>
-        <span className="rounded-md bg-secondary border border-border px-4 py-2 text-sm font-medium">Select Files</span>
+        <span className="rounded-md bg-secondary border border-border px-4 py-2 text-sm font-medium">Select CAD Drawing</span>
         <p className="text-xs text-muted-foreground mt-4">Supported: .dwg, .dxf, .pdf, .png, .jpg — Multiple files allowed</p>
       </div>
       <input ref={fileInputRef} type="file" multiple accept={ACCEPTED_EXTENSIONS.join(",")} className="hidden" onChange={e => handleFiles(e.target.files)} />
@@ -600,7 +914,7 @@ function CADUploadForm({ files, setFiles, onNext }: { files: UploadedFile[]; set
       {files.length > 0 && (
         <div className="space-y-3">
           <h4 className="text-sm font-medium flex items-center gap-2">
-            Uploaded Files <span className="text-xs text-muted-foreground bg-secondary px-2 py-0.5 rounded-full">{files.length}</span>
+            Uploaded Drawings <span className="text-xs text-muted-foreground bg-secondary px-2 py-0.5 rounded-full">{files.length}</span>
           </h4>
           <div className="space-y-2">
             {files.map(f => (
@@ -620,7 +934,7 @@ function CADUploadForm({ files, setFiles, onNext }: { files: UploadedFile[]; set
                     </select>
                     {f.status === "complete" && (
                       <span className="text-xs font-medium text-risk-green bg-risk-green/10 px-2 py-1 rounded-full flex items-center gap-1">
-                        <CheckCircle2 className="h-3 w-3" /> Done
+                        <CheckCircle2 className="h-3 w-3" /> Ready
                       </span>
                     )}
                     <button onClick={() => removeFile(f.id)} className="text-muted-foreground hover:text-risk-red p-1"><Trash2 className="h-4 w-4" /></button>
@@ -639,43 +953,6 @@ function CADUploadForm({ files, setFiles, onNext }: { files: UploadedFile[]; set
           </div>
         </div>
       )}
-
-      <div className="flex justify-end pt-4 border-t border-border">
-        <button onClick={onNext} className="rounded-md bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground hover:opacity-90">Next: Assessment →</button>
-      </div>
-    </div>
-  );
-}
-
-// ── Section 4: Assessment Info ─────────────────────────────────────────────────
-
-function AssessmentInfoForm({ formData, errors, updateField, onNext }: { formData: FormData; errors: ValidationErrors; updateField: (f: keyof FormData, v: string) => void; onNext: () => void }) {
-  return (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
-      <div>
-        <h2 className="text-lg font-semibold flex items-center gap-2"><Calendar className="h-5 w-5 text-primary" /> Assessment Information</h2>
-        <p className="text-sm text-muted-foreground">Details about the assessment being conducted.</p>
-      </div>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Assessment Date">
-          <Input type="date" value={formData.assessmentDate} onChange={v => updateField("assessmentDate", v)} />
-        </Field>
-        <Field label="Assessor Name *" error={errors.assessorName}>
-          <Input value={formData.assessorName} onChange={v => updateField("assessorName", v)} placeholder="Full name of assessor" error={!!errors.assessorName} />
-        </Field>
-      </div>
-      <Field label="Remarks / Notes">
-        <textarea
-          value={formData.remarks}
-          onChange={e => updateField("remarks", e.target.value)}
-          placeholder="Add any additional notes, observations, or instructions..."
-          rows={5}
-          className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring resize-none"
-        />
-      </Field>
-      <div className="flex justify-end pt-4 border-t border-border">
-        <button onClick={onNext} className="rounded-md bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground hover:opacity-90">Next: Review →</button>
-      </div>
     </div>
   );
 }
@@ -685,37 +962,79 @@ function AssessmentInfoForm({ formData, errors, updateField, onNext }: { formDat
 function ReviewSection({ formData, files }: { formData: FormData; files: UploadedFile[] }) {
   const sections = [
     {
-      title: "Building Information", icon: Building2,
+      title: "General Information", icon: Info,
       items: [
         ["Building Name", formData.buildingName], ["Building ID", formData.buildingId], ["Owner", formData.ownerName],
-        ["Type", formData.buildingType], ["Category", formData.functionalCategory], ["Occupancy", formData.occupancyType],
-        ["Floors", formData.numberOfFloors], ["Height", formData.buildingHeight ? `${formData.buildingHeight} m` : ""],
-        ["Area", formData.builtUpArea ? `${formData.builtUpArea} sq.m` : ""], ["Year Built", formData.yearOfConstruction],
-        ["People/Floor", formData.peoplePerFloor], ["Lifts", formData.numberOfLifts], ["Staircases", formData.numberOfStaircases],
-        ["Windows", formData.numberOfWindows], ["Adj. Distance", formData.adjacentBuildingDistance ? `${formData.adjacentBuildingDistance} m` : ""],
-      ],
-    },
-    {
-      title: "Address & Location", icon: MapPin,
-      items: [
+        ["Contact Phone", formData.contactNumber], ["Email", formData.email],
         ["Address", [formData.addressLine1, formData.addressLine2].filter(Boolean).join(", ")],
         ["City", formData.city], ["State", formData.state], ["Country", formData.country],
         ["Postal Code", formData.postalCode], ["Latitude", formData.latitude], ["Longitude", formData.longitude],
       ],
     },
     {
-      title: "Assessment", icon: Calendar,
+      title: "Building Details", icon: Sliders,
       items: [
-        ["Date", formData.assessmentDate], ["Assessor", formData.assessorName], ["Remarks", formData.remarks],
+        ["Type", formData.buildingType], ["Category", formData.functionalCategory],
+        ["Built Area", formData.builtUpArea ? `${formData.builtUpArea} sq.m` : ""], ["Year Built", formData.yearOfConstruction],
+        ["Height", formData.buildingHeight ? `${formData.buildingHeight} m` : ""],
+        ["Construction Type", formData.constructionType], ["Fire Resistance Rating", formData.fireResistanceRating]
+      ],
+    },
+    {
+      title: "Occupancy Details", icon: Users,
+      items: [
+        ["Occupancy", formData.occupancyType], ["Floors count", formData.numberOfFloors],
+        ["Avg. People/Floor", formData.peoplePerFloor], ["Daily Occupants Total", formData.averageDailyOccupants]
+      ],
+    },
+    {
+      title: "Fire Protection Systems", icon: Flame,
+      items: [
+        ["Sprinklers", formData.sprinklerSystem], ["Alarms", formData.fireAlarmSystem],
+        ["Smoke Detectors", formData.smokeDetectors], ["Wet Risers", formData.wetRisers],
+        ["Hose Reels", formData.hoseReels], ["Extinguishers count", formData.fireExtinguishersCount]
+      ],
+    },
+    {
+      title: "Utilities", icon: Zap,
+      items: [
+        ["Primary Power", formData.primaryPower], ["Backup Gen", formData.backupGenerator],
+        ["Gas Valve Shutoff", formData.gasShutoff], ["Water Supply", formData.waterSupply],
+        ["Elec Room Location", formData.electricalRoomLoc]
+      ],
+    },
+    {
+      title: "Structural Details", icon: Ruler,
+      items: [
+        ["Lifts count", formData.numberOfLifts], ["Staircases count", formData.numberOfStaircases],
+        ["Windows count", formData.numberOfWindows], ["Adjacent building dist", formData.adjacentBuildingDistance ? `${formData.adjacentBuildingDistance} m` : ""],
+        ["Main Material", formData.mainConstructionMaterial], ["Roof Structure", formData.roofConstructionType]
+      ],
+    },
+    {
+      title: "Hazardous Materials", icon: AlertTriangle,
+      items: [
+        ["HazMat Present", formData.hazardousMaterialsPresent],
+        ["Flammable liquids", formData.flammableLiquidsQty ? `${formData.flammableLiquidsQty} Liters` : ""],
+        ["Gas Cylinders count", formData.gasCylindersCount], ["Storage Location", formData.hazardStorageLoc],
+        ["MSDS Available", formData.msdsAvailable]
+      ],
+    },
+    {
+      title: "Emergency & Assessment Info", icon: PhoneCall,
+      items: [
+        ["Audit Date", formData.assessmentDate], ["Assessor", formData.assessorName],
+        ["Emergency Contact", formData.emergencyContactName], ["Emergency Contact Phone", formData.emergencyContactPhone],
+        ["Audit Remarks", formData.remarks],
       ],
     },
   ];
 
   return (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
+    <div className="space-y-6">
       <div className="text-center py-4">
         <h2 className="text-xl font-bold">Review Your Submission</h2>
-        <p className="text-sm text-muted-foreground mt-1">Verify all information before submitting. Use the action buttons below to Save Draft, Submit, or Reset.</p>
+        <p className="text-sm text-muted-foreground mt-1">Verify all information categories before submitting. Use the action buttons below to complete.</p>
       </div>
 
       {sections.map(section => {
@@ -745,7 +1064,7 @@ function ReviewSection({ formData, files }: { formData: FormData; files: Uploade
         <div className="rounded-lg border border-border overflow-hidden">
           <div className="flex items-center gap-2 px-4 py-3 bg-muted/30 border-b border-border">
             <Upload className="h-4 w-4 text-primary" />
-            <h3 className="text-sm font-semibold">CAD Files ({files.length})</h3>
+            <h3 className="text-sm font-semibold">CAD Files & Documents ({files.length})</h3>
           </div>
           <div className="divide-y divide-border">
             {files.map(f => (
@@ -766,9 +1085,9 @@ function ReviewSection({ formData, files }: { formData: FormData; files: Uploade
 function PreviewModal({ formData, files, onClose }: { formData: FormData; files: UploadedFile[]; onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
-      <div onClick={e => e.stopPropagation()} className="bg-card rounded-xl border border-border shadow-2xl max-w-2xl w-full max-h-[85vh] overflow-y-auto">
+      <div onClick={e => e.stopPropagation()} className="bg-card rounded-xl border border-border shadow-2xl max-w-3xl w-full max-h-[85vh] overflow-y-auto">
         <div className="sticky top-0 bg-card/95 backdrop-blur flex items-center justify-between px-6 py-4 border-b border-border z-10">
-          <h2 className="text-lg font-bold">Assessment Preview</h2>
+          <h2 className="text-lg font-bold">Assessment Preview Summary</h2>
           <button onClick={onClose} className="rounded-md p-1.5 hover:bg-secondary"><X className="h-5 w-5" /></button>
         </div>
         <div className="p-6">
@@ -901,8 +1220,8 @@ function AdditionalCategoriesTable() {
 
 // ── Reusable UI Components ─────────────────────────────────────────────────────
 
-const inputClasses = "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
-const selectClasses = "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
+const inputClasses = "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-all placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring focus:border-primary";
+const selectClasses = "flex h-9 w-full rounded-md border border-input bg-card px-3 py-1 text-sm shadow-sm transition-all focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring focus:border-primary";
 const errorInputClasses = "border-risk-red focus-visible:ring-risk-red";
 
 function Input({ value, onChange, placeholder, type = "text", error }: { value: string; onChange: (v: string) => void; placeholder?: string; type?: string; error?: boolean }) {

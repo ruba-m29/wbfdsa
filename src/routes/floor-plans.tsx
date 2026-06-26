@@ -1,135 +1,462 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useLiveQuery } from "dexie-react-hooks";
-import { useEffect, useMemo, useState } from "react";
-import { Map as MapIcon, Plus, ZoomIn, ZoomOut, RotateCcw } from "lucide-react";
+import { useEffect, useState, useMemo } from "react";
+import { Map as MapIcon, Settings, Database, Check, AlertCircle, Users } from "lucide-react";
+import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip } from "recharts";
 import { AppShell } from "@/components/app-shell";
-import { FloorPlan } from "@/components/floor-plan";
-import { db, type Zone } from "@/lib/db";
+import { db } from "@/lib/db";
+import { FloorSelector } from "@/components/FloorSelector";
+import { RiskCards } from "@/components/RiskCards";
+import { FloorStatistics } from "@/components/FloorStatistics";
+import { FloorInfoPanel } from "@/components/FloorInfoPanel";
+import { CADViewer } from "@/components/CADViewer";
+import { UploadCAD } from "@/components/UploadCAD";
+import { useFloorData } from "@/hooks/useFloorData";
+import { getBackendConfig, saveBackendConfig, type BackendConfig } from "@/services/config";
+import { syncFromService, createFloorOnService } from "@/services/dbSync";
+import { motion, AnimatePresence } from "framer-motion";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/floor-plans")({
-  head: () => ({ meta: [{ title: "Floor Plans — WB-FDVA" }, { name: "description", content: "Manage floors, zones, and exits on building floor plans." }] }),
+  head: () => ({
+    meta: [
+      { title: "Floor Plans — WB-FDVA" },
+      { name: "description", content: "Manage floors, CAD drawings, exits, and risks." }
+    ]
+  }),
   component: FloorPlansPage,
 });
 
 function FloorPlansPage() {
+  // Local cache reactive queries for dropdown & selector list
   const buildings = useLiveQuery(() => db.buildings.toArray(), []);
   const [bId, setBId] = useState<number | null>(null);
-  useEffect(() => { if (!bId && buildings?.length) setBId(buildings[0].id!); }, [buildings, bId]);
 
-  const floors = useLiveQuery(() => bId ? db.floors.where("buildingId").equals(bId).sortBy("level") : Promise.resolve([] as any[]), [bId]);
-  const [fId, setFId] = useState<number | null>(null);
-  useEffect(() => { if (floors?.length) setFId((cur) => cur && floors.some(f => f.id === cur) ? cur : floors[0].id!); }, [floors]);
+  // Set default building ID
+  useEffect(() => {
+    if (!bId && buildings?.length) {
+      setBId(buildings[0].id!);
+    }
+  }, [buildings, bId]);
 
-  const zones = useLiveQuery(() => fId ? db.zones.where("floorId").equals(fId).toArray() : Promise.resolve([] as any[]), [fId]);
-  const [selected, setSelected] = useState<Zone | null>(null);
-  const [zoom, setZoom] = useState(1);
+  const floors = useLiveQuery(
+    () => (bId ? db.floors.where("buildingId").equals(bId).sortBy("level") : Promise.resolve<any[]>([])),
+    [bId]
+  );
+  
+  const [fLevel, setFLevel] = useState<number | null>(null);
 
-  const floor = floors?.find((f) => f.id === fId);
+  // Query zones for the selected building to compute occupancy at the floor level
+  const zones = useLiveQuery(
+    () => (bId ? db.zones.where("buildingId").equals(bId).toArray() : Promise.resolve<any[]>([])),
+    [bId]
+  );
+
+  // Find the selected floor object
+  const selectedFloorObj = useMemo(() => {
+    return floors?.find((f) => f.level === fLevel);
+  }, [floors, fLevel]);
+
+  // Calculate occupants on this specific floor level
+  const floorOccupants = useMemo(() => {
+    if (!zones || !selectedFloorObj) return 0;
+    const fZones = zones.filter((z) => z.floorId === selectedFloorObj.id);
+    return fZones.reduce((s, z) => s + z.occupancy, 0);
+  }, [zones, selectedFloorObj]);
+
+  // Constants for heatmap & trend
+  const HOURS_2H = useMemo(() => Array.from({ length: 12 }, (_, i) => i * 2), []);
+  const DAYS = useMemo(() => ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"], []);
+
+  // Compute building-occupancy heatmap scaled to floor census
+  const heatmapData = useMemo(() => {
+    const scale = floorOccupants || 25; // fallback
+    return DAYS.map((d, di) =>
+      HOURS_2H.map((h) => {
+        const weekday = di < 5 ? 1.0 : 0.45;
+        const hourFactor = Math.max(0.15, Math.sin(((h - 5) / 12) * Math.PI));
+        return Math.round(scale * weekday * hourFactor * 0.15);
+      })
+    );
+  }, [floorOccupants, DAYS, HOURS_2H]);
+
+  // Compute daily trend for charts
+  const dailyTrend = useMemo(() => {
+    const scale = floorOccupants || 25;
+    return HOURS_2H.map((h) => ({
+      hour: `${h}:00`,
+      occupants: Math.round(scale * (0.2 + 0.8 * Math.max(0.1, Math.sin(((h - 5) / 12) * Math.PI)))),
+    }));
+  }, [floorOccupants, HOURS_2H]);
+
+  // Set default floor level
+  useEffect(() => {
+    if (floors?.length) {
+      // Find matches
+      const currentExists = floors.some(f => f.level === fLevel);
+      if (!currentExists) {
+        setFLevel(floors[0].level);
+      }
+    } else {
+      setFLevel(null);
+    }
+  }, [floors]);
+
+  // Hook for floor details, statistics, and drawings fetched from Google Sheets/Airtable
+  const buildingIdStr = bId ? String(bId) : null;
+  const { floorData, loading, uploadCADFile, updateFloorStats } = useFloorData(buildingIdStr, fLevel);
+
+  // Integration settings state
+  const [showConfig, setShowConfig] = useState(false);
+  const [config, setConfig] = useState<BackendConfig>(getBackendConfig());
+  const [syncing, setSyncing] = useState(false);
+
+  const handleSaveConfig = (updates: Partial<BackendConfig>) => {
+    const updated = saveBackendConfig(updates);
+    setConfig(updated);
+    toast.success(`Active storage set to: ${updated.serviceType === "googleSheets" ? "Google Sheets" : "Airtable"}`);
+  };
+
+  const handleSyncNow = async () => {
+    setSyncing(true);
+    toast.info("Syncing cached data from selected service...");
+    try {
+      await syncFromService();
+      toast.success("Sync completed successfully!");
+      // Reload pages
+      if (buildings?.length) {
+        setBId(buildings[0].id!);
+      }
+    } catch {
+      toast.error("Failed to sync from backend service.");
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const handleAddFloor = async () => {
+    if (!bId) return;
+    const nextLvl = (floors?.length ?? 0) + 1;
+    toast.info(`Adding Floor ${nextLvl}...`);
+    try {
+      await createFloorOnService({
+        buildingId: String(bId),
+        level: nextLvl,
+        name: `Floor ${nextLvl}`,
+        totalExits: 2,
+        availableExits: 2,
+        blockedExits: 0,
+        elevatorWorking: true
+      });
+      toast.success(`Floor ${nextLvl} added successfully!`);
+    } catch (err) {
+      toast.error("Failed to add floor on active service.");
+    }
+  };
 
   return (
-    <AppShell title="Floor Plans" subtitle="Visualize and edit zones, exits, and elevator status">
-      <div className="grid gap-4 lg:grid-cols-[260px_1fr]">
-        <div className="space-y-4">
-          <div className="rounded-lg border border-border bg-card p-3">
-            <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Building</label>
-            <select value={bId ?? ""} onChange={(e) => setBId(+e.target.value)} className="input mt-1 w-full">
-              {buildings?.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-            </select>
-          </div>
-          <div className="rounded-lg border border-border bg-card p-3">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Floors</span>
-              <button
-                onClick={async () => {
-                  if (!bId) return;
-                  const nextLvl = (floors?.length ?? 0) + 1;
-                  await db.floors.add({ buildingId: bId, level: nextLvl, name: `Floor ${nextLvl}`, totalExits: 2, availableExits: 2, blockedExits: 0, elevatorWorking: true });
-                }}
-                className="grid h-6 w-6 place-items-center rounded bg-primary text-primary-foreground"><Plus className="h-3 w-3" /></button>
-            </div>
-            <ul className="space-y-1">
-              {floors?.map((f) => (
-                <li key={f.id}>
-                  <button onClick={() => setFId(f.id!)} className={`w-full text-left rounded-md px-2 py-1.5 text-xs ${fId === f.id ? "bg-primary/15 text-primary font-semibold" : "hover:bg-secondary"}`}>
-                    L{f.level} · {f.name}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-          {floor && (
-            <div className="rounded-lg border border-border bg-card p-3 text-xs space-y-2">
-              <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Exit Management</div>
-              <ExitField label="Total Exits" value={floor.totalExits} onChange={(v) => db.floors.update(floor.id!, { totalExits: v, availableExits: Math.max(0, v - floor.blockedExits) })} />
-              <ExitField label="Blocked Exits" value={floor.blockedExits} onChange={(v) => db.floors.update(floor.id!, { blockedExits: v, availableExits: Math.max(0, floor.totalExits - v) })} />
-              <div className="flex items-center justify-between pt-1">
-                <span className="text-muted-foreground">Elevator</span>
-                <button onClick={() => db.floors.update(floor.id!, { elevatorWorking: !floor.elevatorWorking })} className={`rounded-md px-2 py-1 text-[10px] font-semibold uppercase ${floor.elevatorWorking ? "bg-risk-green/15 text-risk-green" : "bg-risk-red/15 text-risk-red"}`}>
-                  {floor.elevatorWorking ? "Operational" : "Offline"}
-                </button>
+    <AppShell 
+      title="Floor Plans" 
+      subtitle="CAD Draw-sheets, exit counts, and fire risk assessment matrices"
+      actions={
+        <div className="flex gap-2">
+          <button 
+            onClick={() => setShowConfig(!showConfig)}
+            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-1.5 text-xs font-semibold hover:bg-secondary transition-colors"
+          >
+            <Settings className="h-3.5 w-3.5" /> Configure Storage
+          </button>
+          <button 
+            onClick={handleSyncNow}
+            disabled={syncing}
+            className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-50 transition-colors"
+          >
+            <Database className="h-3.5 w-3.5" /> {syncing ? "Syncing..." : "Sync Cache"}
+          </button>
+        </div>
+      }
+    >
+      {/* Backend Integration Panel */}
+      <AnimatePresence>
+        {showConfig && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className="mb-4 overflow-hidden rounded-xl border border-border bg-card shadow-sm"
+          >
+            <div className="p-4 space-y-4 text-sm">
+              <div className="flex items-center justify-between border-b border-border pb-2">
+                <h3 className="font-semibold flex items-center gap-2 text-foreground">
+                  <Database className="h-4 w-4 text-primary" /> Active Storage Service Settings
+                </h3>
+                <button onClick={() => setShowConfig(false)} className="text-xs text-muted-foreground hover:text-foreground">Close</button>
               </div>
+              <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
+                <label className="block text-xs">
+                  <span className="block text-muted-foreground mb-1">Active Backend Service</span>
+                  <select 
+                    value={config.serviceType}
+                    onChange={(e) => handleSaveConfig({ serviceType: e.target.value as any })}
+                    className="w-full h-8 rounded border border-input bg-background px-2 text-xs"
+                  >
+                    <option value="googleSheets">Google Sheets</option>
+                    <option value="airtable">Airtable</option>
+                  </select>
+                </label>
+                
+                {config.serviceType === "googleSheets" ? (
+                  <>
+                    <label className="block text-xs">
+                      <span className="block text-muted-foreground mb-1">Spreadsheet ID</span>
+                      <input 
+                        type="text" 
+                        placeholder="Spreadsheet key..." 
+                        value={config.googleSheetsSpreadsheetId}
+                        onChange={(e) => handleSaveConfig({ googleSheetsSpreadsheetId: e.target.value })}
+                        className="w-full h-8 rounded border border-input bg-background px-2 text-xs"
+                      />
+                    </label>
+                    <label className="block text-xs">
+                      <span className="block text-muted-foreground mb-1">Apps Script Web App URL</span>
+                      <input 
+                        type="password" 
+                        placeholder="https://script.google.com/..." 
+                        value={config.googleSheetsApiKey}
+                        onChange={(e) => handleSaveConfig({ googleSheetsApiKey: e.target.value })}
+                        className="w-full h-8 rounded border border-input bg-background px-2 text-xs"
+                      />
+                    </label>
+                  </>
+                ) : (
+                  <>
+                    <label className="block text-xs">
+                      <span className="block text-muted-foreground mb-1">Base ID</span>
+                      <input 
+                        type="text" 
+                        placeholder="app..." 
+                        value={config.airtableBaseId}
+                        onChange={(e) => handleSaveConfig({ airtableBaseId: e.target.value })}
+                        className="w-full h-8 rounded border border-input bg-background px-2 text-xs"
+                      />
+                    </label>
+                    <label className="block text-xs">
+                      <span className="block text-muted-foreground mb-1">Personal Access Token (PAT)</span>
+                      <input 
+                        type="password" 
+                        placeholder="pat..." 
+                        value={config.airtableApiKey}
+                        onChange={(e) => handleSaveConfig({ airtableApiKey: e.target.value })}
+                        className="w-full h-8 rounded border border-input bg-background px-2 text-xs"
+                      />
+                    </label>
+                  </>
+                )}
+              </div>
+              <div className="flex items-center justify-between border-t border-border pt-2 text-xs">
+                <label className="flex items-center gap-1.5 text-muted-foreground">
+                  <input 
+                    type="checkbox" 
+                    checked={config.useMockFallback}
+                    onChange={(e) => handleSaveConfig({ useMockFallback: e.target.checked })}
+                    className="rounded border-input text-primary focus:ring-primary h-3.5 w-3.5"
+                  />
+                  Use local storage mock sandbox if keys are unconfigured
+                </label>
+                <span className="text-[10px] text-muted-foreground font-mono">
+                  Configured: {config.useMockFallback ? "Local Sandbox Sandbox" : "Remote Live Sync"}
+                </span>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <div className="grid gap-4 lg:grid-cols-[280px_1fr]">
+        {/* Left Side Selector (Desktop Layout) */}
+        <div className="space-y-4">
+          <FloorSelector
+            buildings={buildings ?? []}
+            selectedBuildingId={bId ? String(bId) : null}
+            onSelectBuilding={(id) => setBId(Number(id))}
+            floors={floors ?? []}
+            selectedFloorLevel={fLevel}
+            onSelectFloor={(level) => setFLevel(level)}
+            onAddFloor={handleAddFloor}
+          />
+          
+          {floorData && (
+            <div className="rounded-xl border border-border bg-card p-4 shadow-sm space-y-4">
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground border-b border-border pb-1.5">
+                Quick Exit Edit
+              </h4>
+              <div className="grid gap-3">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground font-medium">Direct Exits</span>
+                  <input
+                    type="number"
+                    min={0}
+                    value={floorData.stats.directExits}
+                    onChange={(e) => updateFloorStats({ directExits: Number(e.target.value) })}
+                    className="w-16 h-8 rounded border border-input bg-background px-2 text-right text-xs"
+                  />
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground font-medium">Doors Count</span>
+                  <input
+                    type="number"
+                    min={0}
+                    value={floorData.stats.doors}
+                    onChange={(e) => updateFloorStats({ doors: Number(e.target.value) })}
+                    className="w-16 h-8 rounded border border-input bg-background px-2 text-right text-xs"
+                  />
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground font-medium">Windows Count</span>
+                  <input
+                    type="number"
+                    min={0}
+                    value={floorData.stats.windows}
+                    onChange={(e) => updateFloorStats({ windows: Number(e.target.value) })}
+                    className="w-16 h-8 rounded border border-input bg-background px-2 text-right text-xs"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Upload Widget under selector */}
+          {floorData && (
+            <div className="rounded-xl border border-border bg-card p-4 shadow-sm space-y-3">
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground border-b border-border pb-1.5">
+                Layout Management
+              </h4>
+              <UploadCAD onUpload={uploadCADFile} />
             </div>
           )}
         </div>
 
-        <div className="space-y-4">
-          {floor ? (
-            <>
-              <div className="flex items-center justify-between rounded-lg border border-border bg-card px-3 py-2">
-                <div className="text-sm font-semibold">{floor.name} — Level {floor.level}</div>
-                <div className="flex items-center gap-1">
-                  <button onClick={() => setZoom((z) => Math.max(0.5, z - 0.25))} className="grid h-7 w-7 place-items-center rounded border border-border hover:bg-secondary"><ZoomOut className="h-3.5 w-3.5" /></button>
-                  <span className="font-mono text-xs w-12 text-center">{Math.round(zoom * 100)}%</span>
-                  <button onClick={() => setZoom((z) => Math.min(3, z + 0.25))} className="grid h-7 w-7 place-items-center rounded border border-border hover:bg-secondary"><ZoomIn className="h-3.5 w-3.5" /></button>
-                  <button onClick={() => setZoom(1)} className="grid h-7 w-7 place-items-center rounded border border-border hover:bg-secondary"><RotateCcw className="h-3.5 w-3.5" /></button>
+        {/* Right Side Content Pane */}
+        <div className="space-y-4 min-w-0">
+          {loading ? (
+            <div className="rounded-xl border border-border bg-card p-12 flex flex-col items-center justify-center min-h-[400px]">
+              <div className="relative flex items-center justify-center">
+                <div className="h-10 w-10 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+              </div>
+              <p className="text-xs text-muted-foreground mt-4">Loading floor blueprint data from active storage...</p>
+            </div>
+          ) : floorData ? (
+            <div className="space-y-4">
+              {/* Risk Cards */}
+              <RiskCards
+                floorRisk={floorData.risks.floorRisk}
+                occupancyRisk={floorData.risks.occupancyRisk}
+                individualRisk={floorData.risks.individualRisk}
+                overallFireRisk={floorData.risks.overallFireRisk}
+              />
+
+              {/* Floor Details Panel */}
+              <FloorInfoPanel details={floorData.details} />
+
+              {/* CAD Viewer Container */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between rounded-xl border border-border bg-card/40 px-4 py-2.5">
+                  <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                    <MapIcon className="h-4 w-4 text-primary" /> Blueprints & CAD Viewer
+                  </span>
+                  <span className="text-[10px] font-mono text-muted-foreground">
+                    Level {floorData.level} · {floorData.name}
+                  </span>
+                </div>
+                
+                <CADViewer drawing={floorData.drawing} />
+              </div>
+
+              {/* Floor Statistics Cards */}
+              <FloorStatistics stats={floorData.stats} />
+
+              {/* Occupancy Heatmap & Daily Trends */}
+              <div className="rounded-xl border border-border bg-card p-4 shadow-sm space-y-4">
+                <div className="flex items-center justify-between border-b border-border pb-2">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+                    <Users className="h-4 w-4 text-orange-500" /> Floor Occupancy Heatmap & Trends
+                  </h3>
+                  <span className="text-[10px] font-mono text-muted-foreground">
+                    Active Census: {floorOccupants} occupants
+                  </span>
+                </div>
+
+                <div className="grid gap-6 md:grid-cols-[1fr_260px]">
+                  {/* Weekly Heatmap */}
+                  <div className="space-y-2 overflow-hidden">
+                    <h4 className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Weekly Load Cycle</h4>
+                    <div className="overflow-x-auto">
+                      <div className="inline-grid gap-1 py-1" style={{ gridTemplateColumns: `60px repeat(12, minmax(28px, 1fr))` }}>
+                        <div />
+                        {HOURS_2H.map((h) => <div key={h} className="text-[9px] text-center text-muted-foreground font-mono">{h}:00</div>)}
+                        {DAYS.map((d, di) => (
+                          <DayRow key={d} label={d} values={heatmapData[di]} maxVal={floorOccupants * 0.15 || 1} />
+                        ))}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 text-[9px] text-muted-foreground font-medium">
+                      <span>Low Load</span>
+                      {[15, 35, 55, 75, 95].map((v) => (
+                        <span key={v} className="h-3 w-8 rounded-sm" style={{ background: `rgba(229, 90, 50, ${v / 100})` }} />
+                      ))}
+                      <span>Peak Load</span>
+                    </div>
+                  </div>
+
+                  {/* Daily Trend Line Chart */}
+                  <div className="flex flex-col justify-between min-h-[140px]">
+                    <h4 className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-2">Daily Census Cycle</h4>
+                    <div className="h-28">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={dailyTrend} margin={{ top: 5, right: 5, left: -30, bottom: 0 }}>
+                          <XAxis dataKey="hour" tick={{ fill: "var(--muted-foreground)", fontSize: 8 }} axisLine={false} tickLine={false} />
+                          <YAxis tick={{ fill: "var(--muted-foreground)", fontSize: 8 }} axisLine={false} tickLine={false} />
+                          <Tooltip contentStyle={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 6, fontSize: 9 }} />
+                          <Line type="monotone" dataKey="occupants" stroke="rgba(229, 90, 50, 1)" strokeWidth={2} dot={false} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
                 </div>
               </div>
-              <div className="overflow-auto rounded-lg">
-                <div style={{ transform: `scale(${zoom})`, transformOrigin: "top left", width: `${100 / zoom}%` }}>
-                  <FloorPlan floor={floor} zones={zones ?? []} onZoneClick={setSelected} selectedZoneId={selected?.id ?? null} />
-                </div>
-              </div>
-            </>
+            </div>
           ) : (
-            <div className="rounded-lg border border-dashed border-border bg-card/40 p-10 text-center text-sm text-muted-foreground">
-              <MapIcon className="mx-auto h-8 w-8" /> Select a floor to view its plan
+            <div className="rounded-xl border border-dashed border-border bg-card/40 p-12 text-center text-sm text-muted-foreground flex flex-col items-center justify-center min-h-[400px]">
+              <MapIcon className="mx-auto h-10 w-10 mb-3 text-muted-foreground/60" />
+              <h4 className="font-semibold text-foreground mb-1">Select a Building & Floor</h4>
+              <p className="max-w-xs text-xs text-muted-foreground leading-relaxed">
+                Choose a registered building and floor level from the left selector pane to display details, risks, and drawing vector layouts.
+              </p>
             </div>
           )}
-
-          {selected && floor && <ZoneEditor zone={selected} onClose={() => setSelected(null)} />}
         </div>
       </div>
     </AppShell>
   );
 }
 
-function ExitField({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
+function DayRow({ label, values, maxVal }: { label: string; values: number[]; maxVal: number }) {
   return (
-    <div className="flex items-center justify-between">
-      <span className="text-muted-foreground">{label}</span>
-      <input type="number" min={0} value={value} onChange={(e) => onChange(+e.target.value)} className="input w-16 text-right" />
-    </div>
-  );
-}
-
-function ZoneEditor({ zone, onClose }: { zone: Zone; onClose: () => void }) {
-  const [form, setForm] = useState(zone);
-  useEffect(() => setForm(zone), [zone]);
-  return (
-    <div className="rounded-lg border border-border bg-card p-4">
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold">Zone {zone.zoneId}</h3>
-        <button onClick={onClose} className="text-xs text-muted-foreground hover:text-foreground">Close</button>
-      </div>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <label className="text-xs"><span className="block text-muted-foreground mb-1">Name</span><input className="input w-full" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label>
-        <label className="text-xs"><span className="block text-muted-foreground mb-1">Area (m²)</span><input type="number" className="input w-full" value={form.area} onChange={(e) => setForm({ ...form, area: +e.target.value })} /></label>
-        <label className="text-xs"><span className="block text-muted-foreground mb-1">Occupancy</span><input type="number" className="input w-full" value={form.occupancy} onChange={(e) => setForm({ ...form, occupancy: +e.target.value })} /></label>
-        <label className="text-xs"><span className="block text-muted-foreground mb-1">Special Needs</span><input type="number" className="input w-full" value={form.specialNeeds} onChange={(e) => setForm({ ...form, specialNeeds: +e.target.value })} /></label>
-      </div>
-      <div className="mt-3 flex justify-end">
-        <button onClick={async () => { await db.zones.update(zone.id!, form); onClose(); }} className="rounded-md bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground">Save Zone</button>
-      </div>
-    </div>
+    <>
+      <div className="flex items-center text-[10px] text-muted-foreground font-bold pr-2">{label}</div>
+      {values.map((v, i) => {
+        const opacity = maxVal > 0 ? Math.min(1.0, Math.max(0.1, v / maxVal)) : 0.1;
+        return (
+          <div
+            key={i}
+            className="aspect-square w-full rounded-sm border border-black/5"
+            style={{
+              background: `rgba(229, 90, 50, ${opacity})`,
+            }}
+            title={`${v} occupants`}
+          />
+        );
+      })}
+    </>
   );
 }

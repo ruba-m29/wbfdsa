@@ -13,11 +13,27 @@ export const Route = createFileRoute("/settings")({
 
 function SettingsPage() {
   const [mult, setMult] = useState(ZONE_MULTIPLIER);
-  const [orgName, setOrgName] = useState("TrustGrid.AI Demo Org");
-  const [mapsApiKey, setMapsApiKey] = useState("");
+  const [orgName, setOrgName] = useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("wb-org-name") || "TrustGrid.AI Demo Org";
+    }
+    return "TrustGrid.AI Demo Org";
+  });
+  const [mapsApiKey, setMapsApiKey] = useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("wb-maps-api-key") || "";
+    }
+    return "";
+  });
+
+  const handleSave = () => {
+    localStorage.setItem("wb-org-name", orgName);
+    localStorage.setItem("wb-maps-api-key", mapsApiKey);
+    toast.success("Settings saved successfully");
+  };
 
   return (
-    <AppShell title="Settings" subtitle="System preferences, API configurations, and assessment parameters" actions={<button className="hidden sm:inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground hover:opacity-90" onClick={() => toast.success("Settings saved successfully")}><Save className="h-3.5 w-3.5" /> Save Changes</button>}>
+    <AppShell title="Settings" subtitle="System preferences, API configurations, and assessment parameters" actions={<button className="hidden sm:inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground hover:opacity-90" onClick={handleSave}><Save className="h-3.5 w-3.5" /> Save Changes</button>}>
       <div className="grid gap-4 lg:grid-cols-2">
         <Section title="Organization Profile" description="Manage your organization's branding and display name.">
           <label className="block text-xs mb-3"><span className="block text-muted-foreground mb-1">Organization Name</span><input className="input w-full" value={orgName} onChange={(e) => setOrgName(e.target.value)} /></label>

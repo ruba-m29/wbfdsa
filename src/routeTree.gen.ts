@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as VulnerabilityRouteImport } from './routes/vulnerability'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as ReportsRouteImport } from './routes/reports'
+import { Route as PortfolioMapRouteImport } from './routes/portfolio-map'
 import { Route as PersonnelRouteImport } from './routes/personnel'
 import { Route as OccupancyRouteImport } from './routes/occupancy'
 import { Route as IncidentsRouteImport } from './routes/incidents'
@@ -34,6 +35,11 @@ const SettingsRoute = SettingsRouteImport.update({
 const ReportsRoute = ReportsRouteImport.update({
   id: '/reports',
   path: '/reports',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PortfolioMapRoute = PortfolioMapRouteImport.update({
+  id: '/portfolio-map',
+  path: '/portfolio-map',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PersonnelRoute = PersonnelRouteImport.update({
@@ -86,6 +92,7 @@ export interface FileRoutesByFullPath {
   '/incidents': typeof IncidentsRoute
   '/occupancy': typeof OccupancyRoute
   '/personnel': typeof PersonnelRoute
+  '/portfolio-map': typeof PortfolioMapRoute
   '/reports': typeof ReportsRoute
   '/settings': typeof SettingsRoute
   '/vulnerability': typeof VulnerabilityRoute
@@ -99,6 +106,7 @@ export interface FileRoutesByTo {
   '/incidents': typeof IncidentsRoute
   '/occupancy': typeof OccupancyRoute
   '/personnel': typeof PersonnelRoute
+  '/portfolio-map': typeof PortfolioMapRoute
   '/reports': typeof ReportsRoute
   '/settings': typeof SettingsRoute
   '/vulnerability': typeof VulnerabilityRoute
@@ -113,6 +121,7 @@ export interface FileRoutesById {
   '/incidents': typeof IncidentsRoute
   '/occupancy': typeof OccupancyRoute
   '/personnel': typeof PersonnelRoute
+  '/portfolio-map': typeof PortfolioMapRoute
   '/reports': typeof ReportsRoute
   '/settings': typeof SettingsRoute
   '/vulnerability': typeof VulnerabilityRoute
@@ -128,6 +137,7 @@ export interface FileRouteTypes {
     | '/incidents'
     | '/occupancy'
     | '/personnel'
+    | '/portfolio-map'
     | '/reports'
     | '/settings'
     | '/vulnerability'
@@ -141,6 +151,7 @@ export interface FileRouteTypes {
     | '/incidents'
     | '/occupancy'
     | '/personnel'
+    | '/portfolio-map'
     | '/reports'
     | '/settings'
     | '/vulnerability'
@@ -154,6 +165,7 @@ export interface FileRouteTypes {
     | '/incidents'
     | '/occupancy'
     | '/personnel'
+    | '/portfolio-map'
     | '/reports'
     | '/settings'
     | '/vulnerability'
@@ -168,6 +180,7 @@ export interface RootRouteChildren {
   IncidentsRoute: typeof IncidentsRoute
   OccupancyRoute: typeof OccupancyRoute
   PersonnelRoute: typeof PersonnelRoute
+  PortfolioMapRoute: typeof PortfolioMapRoute
   ReportsRoute: typeof ReportsRoute
   SettingsRoute: typeof SettingsRoute
   VulnerabilityRoute: typeof VulnerabilityRoute
@@ -194,6 +207,13 @@ declare module '@tanstack/react-router' {
       path: '/reports'
       fullPath: '/reports'
       preLoaderRoute: typeof ReportsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/portfolio-map': {
+      id: '/portfolio-map'
+      path: '/portfolio-map'
+      fullPath: '/portfolio-map'
+      preLoaderRoute: typeof PortfolioMapRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/personnel': {
@@ -264,6 +284,7 @@ const rootRouteChildren: RootRouteChildren = {
   IncidentsRoute: IncidentsRoute,
   OccupancyRoute: OccupancyRoute,
   PersonnelRoute: PersonnelRoute,
+  PortfolioMapRoute: PortfolioMapRoute,
   ReportsRoute: ReportsRoute,
   SettingsRoute: SettingsRoute,
   VulnerabilityRoute: VulnerabilityRoute,

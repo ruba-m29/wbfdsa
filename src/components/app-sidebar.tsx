@@ -1,12 +1,13 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { LayoutDashboard, Building2, Map, Users, Flame, ShieldAlert, FileText, Settings, CalendarRange, Radio } from "lucide-react";
+import { LayoutDashboard, Building2, Map, Users, Flame, ShieldAlert, FileText, Settings, CalendarRange, Radio, Layers } from "lucide-react";
 import { useApp } from "@/lib/store";
 
 const items = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/portfolio-map", label: "Portfolio Map", icon: Map },
   { to: "/buildings", label: "Buildings", icon: Building2 },
   { to: "/building-input", label: "Building Input", icon: Building2 },
-  { to: "/floor-plans", label: "Floor Plans", icon: Map },
+  { to: "/floor-plans", label: "Floor Plans", icon: Layers },
   { to: "/occupancy", label: "Occupancy", icon: CalendarRange },
   { to: "/personnel", label: "Personnel", icon: Users },
   { to: "/incidents", label: "Fire Incidents", icon: Flame },
