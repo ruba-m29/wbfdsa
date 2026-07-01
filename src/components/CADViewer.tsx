@@ -2,21 +2,24 @@ import React from "react";
 import { FileArchive, FileText, Download, AlertTriangle } from "lucide-react";
 import { motion } from "framer-motion";
 import { PDFViewer } from "./PDFViewer";
-import type { CADDrawing } from "@/types/floor";
+import type { CADDrawing, FloorDetails, FloorStatistics } from "@/types/floor";
 
 interface CADViewerProps {
   drawing?: CADDrawing;
+  details?: FloorDetails;
+  stats?: FloorStatistics;
   onDownload?: () => void;
 }
 
-export function CADViewer({ drawing, onDownload }: CADViewerProps) {
+export function CADViewer({ drawing, details, stats, onDownload }: CADViewerProps) {
   if (!drawing) {
     return (
       <div className="rounded-xl border border-dashed border-border bg-card/40 p-12 text-center text-sm text-muted-foreground flex flex-col items-center justify-center min-h-[350px]">
         <FileText className="mx-auto h-10 w-10 mb-3 text-muted-foreground/60" />
         <h4 className="font-semibold text-foreground mb-1">No Floor Layout Loaded</h4>
         <p className="max-w-xs text-xs text-muted-foreground leading-relaxed">
-          Please upload a PDF, DWG, DXF or image drawing for this floor level to activate the CAD viewer.
+          Please upload a PDF, DWG, DXF or image drawing for this floor level to activate the CAD
+          viewer.
         </p>
       </div>
     );
@@ -43,7 +46,7 @@ export function CADViewer({ drawing, onDownload }: CADViewerProps) {
       initial={{ opacity: 0, scale: 0.98 }}
       animate={{ opacity: 1, scale: 1 }}
       transition={{ duration: 0.2 }}
-      className="w-full rounded-xl border border-border bg-secondary/20 overflow-hidden"
+      className="w-full rounded-xl border border-border bg-secondary/20 overflow-hidden relative"
     >
       {type === "pdf" ? (
         <PDFViewer url={url} name={name} />
@@ -51,7 +54,9 @@ export function CADViewer({ drawing, onDownload }: CADViewerProps) {
         <div className="flex flex-col bg-card">
           {/* Image Toolbar */}
           <div className="flex items-center justify-between border-b border-border bg-muted/30 px-4 py-2 text-xs">
-            <span className="font-medium text-foreground truncate max-w-[300px]" title={name}>{name}</span>
+            <span className="font-medium text-foreground truncate max-w-[300px]" title={name}>
+              {name}
+            </span>
             <button
               onClick={handleDownload}
               className="inline-flex items-center gap-1 px-2.5 py-1 rounded border border-border bg-background hover:bg-secondary text-primary font-semibold transition-colors"
@@ -78,7 +83,8 @@ export function CADViewer({ drawing, onDownload }: CADViewerProps) {
             CAD Drawing Format ({type.toUpperCase()})
           </h4>
           <p className="max-w-md text-xs text-muted-foreground leading-relaxed mb-6">
-            Browser previews are unavailable for <strong>.{type}</strong> files. You can download the CAD source file below to open it in AutoCAD or a DXF/DWG vector viewer.
+            Browser previews are unavailable for <strong>.{type}</strong> files. You can download
+            the CAD source file below to open it in AutoCAD or a DXF/DWG vector viewer.
           </p>
           <div className="flex flex-col sm:flex-row items-center gap-3">
             <button

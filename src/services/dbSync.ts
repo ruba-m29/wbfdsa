@@ -1,141 +1,190 @@
 import { db } from "@/lib/db";
-import { getBackendConfig } from "./config";
 import { googleSheetsService } from "./googleSheets";
-import { airtableService } from "./airtable";
+
+// Define a global flag on window to prevent syncing to cloud during initial bulk download
+declare global {
+  interface Window {
+    __DISABLE_SYNC_HOOKS__?: boolean;
+  }
+}
+
+export async function syncFullDatabase() {
+  console.log("[WB-FDVA] Starting full database sync from Google Sheets...");
+
+  try {
+    const data = await googleSheetsService.fetchFullDatabase();
+
+    // Disable hooks so we don't accidentally push this data back to the cloud
+    window.__DISABLE_SYNC_HOOKS__ = true;
+
+    // Clear and populate Dexie
+    const tables = [
+      "buildings",
+      "floors",
+      "zones",
+      "personnel",
+      "incidents",
+      "occupancy",
+      "activity",
+    ] as const;
+
+    for (const table of tables) {
+      if (data[table] && Array.isArray(data[table])) {
+        await db.table(table).clear();
+
+        // Ensure numeric IDs are preserved as numbers for local Dexie indexes where necessary
+        const rows = data[table].map((row: any) => {
+          const parsedId = Number(row.id);
+          return {
+            ...row,
+            id: isNaN(parsedId) ? row.id : parsedId,
+          };
+        });
+
+        if (rows.length > 0) {
+          await db.table(table).bulkAdd(rows);
+        }
+      }
+    }
+    console.log("[WB-FDVA] Full database sync complete.");
+  } catch (err) {
+    console.error("[WB-FDVA] Failed to sync database:", err);
+  } finally {
+    window.__DISABLE_SYNC_HOOKS__ = false;
+  }
+}
+
+export function attachDexieHooks() {
+  console.log("[WB-FDVA] Attaching Dexie hooks for Google Sheets sync...");
+  const tables = [
+    "buildings",
+    "floors",
+    "zones",
+    "personnel",
+    "incidents",
+    "occupancy",
+    "activity",
+  ];
+
+  tables.forEach((tableName) => {
+    db.table(tableName).hook("creating", function (primKey, obj, trans) {
+      if (window.__DISABLE_SYNC_HOOKS__) return;
+      // Fire and forget after the item is saved and we have the final ID
+      this.onsuccess = function (generatedPrimaryKey) {
+        const finalObj = { ...obj, id: generatedPrimaryKey };
+        googleSheetsService.remoteCreate(tableName, finalObj).catch((e) => console.error(e));
+      };
+    });
+
+    db.table(tableName).hook("updating", function (mods, primKey, obj, trans) {
+      if (window.__DISABLE_SYNC_HOOKS__) return;
+      // Merge mods with obj to send full update or just mods
+      googleSheetsService
+        .remoteUpdate(tableName, primKey, { ...obj, ...mods })
+        .catch((e) => console.error(e));
+    });
+
+    db.table(tableName).hook("deleting", function (primKey, obj, trans) {
+      if (window.__DISABLE_SYNC_HOOKS__) return;
+      googleSheetsService.remoteDelete(tableName, primKey).catch((e) => console.error(e));
+    });
+  });
+}
+
+// -------------------------------------------------------------
+// Pass-throughs for legacy UI imports so we don't break them
+// -------------------------------------------------------------
 
 export function getActiveService() {
-  const config = getBackendConfig();
-  if (config.serviceType === "airtable") {
-    return airtableService;
-  }
   return googleSheetsService;
 }
 
 export async function syncFromService() {
-  const service = getActiveService();
-  try {
-    // 1. Fetch Buildings
-    const remoteBuildings = await service.fetchBuildings();
-    if (remoteBuildings && remoteBuildings.length > 0) {
-      await db.buildings.clear();
-      for (const b of remoteBuildings) {
-        // Map string IDs to numbers for local Dexie if applicable, or keep them as is
-        const localBuilding = {
-          ...b,
-          id: isNaN(Number(b.id)) ? Math.floor(Math.random() * 100000) : Number(b.id),
-          floors: Number(b.floors) || 1,
-          totalArea: Number(b.totalArea) || 0
-        };
-        await db.buildings.put(localBuilding);
-      }
-    }
-
-    // 2. Fetch Floors for each building
-    const buildings = await db.buildings.toArray();
-    await db.floors.clear();
-    for (const b of buildings) {
-      const remoteFloors = await service.fetchFloors(String(b.id));
-      for (const f of remoteFloors) {
-        const localFloor = {
-          ...f,
-          id: isNaN(Number(f.id)) ? Math.floor(Math.random() * 100000) : Number(f.id),
-          buildingId: b.id!,
-          level: Number(f.level) || 1,
-          totalExits: Number(f.totalExits) || 2,
-          availableExits: Number(f.availableExits) || 2,
-          blockedExits: Number(f.blockedExits) || 0,
-          elevatorWorking: f.elevatorWorking === true || f.elevatorWorking === "true" || f.elevatorWorking === "Operational"
-        };
-        await db.floors.put(localFloor);
-      }
-    }
-  } catch (err) {
-    console.error("Failed to sync from backend service to local Dexie cache:", err);
-  }
+  await syncFullDatabase();
 }
 
 export async function createBuildingOnService(buildingData: any) {
-  const service = getActiveService();
-  const created = await service.createBuilding(buildingData);
-  // Also put into local Dexie
-  const localId = isNaN(Number(created.id)) ? Math.floor(Math.random() * 100000) : Number(created.id);
-  await db.buildings.put({
-    ...created,
-    id: localId
-  });
-  return created;
+  const localId = buildingData.id || Math.floor(Math.random() * 100000);
+  const toAdd = { ...buildingData, id: localId };
+  // Pushing to local Dexie will automatically trigger the "creating" hook!
+  await db.buildings.put(toAdd);
+  return toAdd;
 }
 
 export async function updateBuildingOnService(id: string, updates: any) {
-  const service = getActiveService();
-  const updated = await service.updateBuilding(id, updates);
-  // Update local Dexie
-  const localId = isNaN(Number(id)) ? null : Number(id);
-  if (localId) {
-    await db.buildings.update(localId, updates);
+  const localId = isNaN(Number(id)) ? id : Number(id);
+  const match = await db.buildings.get(localId as any);
+  if (match) {
+    await db.buildings.update(match.id!, updates);
   } else {
-    // If string ID, find by name or other field to update
-    const match = await db.buildings.where("name").equals(updates.name || "").first();
-    if (match) {
-      await db.buildings.update(match.id!, updates);
+    const matchByName = await db.buildings
+      .where("name")
+      .equals(updates.name || "")
+      .first();
+    if (matchByName) {
+      await db.buildings.update(matchByName.id!, updates);
     }
   }
-  return updated;
+  return { ...match, ...updates };
 }
 
 export async function deleteBuildingFromService(id: string) {
-  const service = getActiveService();
-  await service.deleteBuilding(id);
-  // Delete from local Dexie
-  const localId = isNaN(Number(id)) ? null : Number(id);
-  if (localId) {
-    await db.buildings.delete(localId);
-    await db.floors.where("buildingId").equals(localId).delete();
+  const localId = isNaN(Number(id)) ? id : Number(id);
+  await db.buildings.delete(localId as any);
+  // Also cascade
+  const floors = await db.floors.where("buildingId").equals(localId).toArray();
+  for (const f of floors) {
+    await db.floors.delete(f.id!);
   }
 }
 
 export async function createFloorOnService(floorData: any) {
-  const service = getActiveService();
-  const created = await service.createFloor(floorData);
-  // Put into local Dexie
-  const localId = isNaN(Number(created.id)) ? Math.floor(Math.random() * 100000) : Number(created.id);
-  await db.floors.put({
-    ...created,
+  const localId = floorData.id || Math.floor(Math.random() * 100000);
+  const toAdd = {
+    ...floorData,
     id: localId,
-    buildingId: Number(floorData.buildingId)
-  });
-  return created;
+    buildingId: Number(floorData.buildingId) || floorData.buildingId,
+  };
+  await db.floors.put(toAdd);
+  return toAdd;
 }
 
-export async function updateFloorOnService(id: string, updates: any, buildingId: number, level: number) {
-  const service = getActiveService();
-  const updated = await service.updateFloor(id, updates);
-  
-  // Sync to local Dexie
-  const localId = isNaN(Number(id)) ? null : Number(id);
-  if (localId) {
-    await db.floors.update(localId, updates);
+export async function updateFloorOnService(
+  id: string,
+  updates: any,
+  buildingId: number,
+  level: number,
+) {
+  const localId = isNaN(Number(id)) ? id : Number(id);
+  const match = await db.floors.get(localId as any);
+  if (match) {
+    await db.floors.update(match.id!, updates);
   } else {
-    const match = await db.floors.where("buildingId").equals(buildingId).and(f => f.level === level).first();
-    if (match) {
-      await db.floors.update(match.id!, updates);
+    const altMatch = await db.floors
+      .where("buildingId")
+      .equals(buildingId)
+      .and((f) => f.level === level)
+      .first();
+    if (altMatch) {
+      await db.floors.update(altMatch.id!, updates);
     }
   }
-  return updated;
+  return { ...match, ...updates };
 }
 
 export async function deleteFloorFromService(id: string, buildingId: number, level: number) {
-  const service = getActiveService();
-  await service.deleteFloor(id);
-  
-  // Sync to local Dexie
-  const localId = isNaN(Number(id)) ? null : Number(id);
-  if (localId) {
-    await db.floors.delete(localId);
+  const localId = isNaN(Number(id)) ? id : Number(id);
+  const match = await db.floors.get(localId as any);
+  if (match) {
+    await db.floors.delete(match.id!);
   } else {
-    const match = await db.floors.where("buildingId").equals(buildingId).and(f => f.level === level).first();
-    if (match) {
-      await db.floors.delete(match.id!);
+    const altMatch = await db.floors
+      .where("buildingId")
+      .equals(buildingId)
+      .and((f) => f.level === level)
+      .first();
+    if (altMatch) {
+      await db.floors.delete(altMatch.id!);
     }
   }
 }

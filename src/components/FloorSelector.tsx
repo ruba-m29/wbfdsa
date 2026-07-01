@@ -18,7 +18,7 @@ export function FloorSelector({
   floors,
   selectedFloorLevel,
   onSelectFloor,
-  onAddFloor
+  onAddFloor,
 }: FloorSelectorProps) {
   return (
     <div className="space-y-4">
@@ -60,7 +60,7 @@ export function FloorSelector({
             </button>
           )}
         </div>
-        
+
         {floors.length === 0 ? (
           <p className="text-xs text-muted-foreground text-center py-4">No floors added yet.</p>
         ) : (
@@ -76,9 +76,11 @@ export function FloorSelector({
                   }`}
                 >
                   <span>{f.name || `Floor ${f.level}`}</span>
-                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
-                    selectedFloorLevel === f.level ? "bg-primary-foreground/20" : "bg-muted"
-                  }`}>
+                  <span
+                    className={`text-[10px] px-1.5 py-0.5 rounded-full ${
+                      selectedFloorLevel === f.level ? "bg-primary-foreground/20" : "bg-muted"
+                    }`}
+                  >
                     L{f.level}
                   </span>
                 </button>

@@ -1,6 +1,18 @@
 import type { LucideIcon } from "lucide-react";
 
-export function KpiCard({ label, value, icon: Icon, tone = "default", hint }: { label: string; value: string | number; icon: LucideIcon; tone?: "default" | "danger" | "warn" | "success"; hint?: string }) {
+export function KpiCard({
+  label,
+  value,
+  icon: Icon,
+  tone = "default",
+  hint,
+}: {
+  label: string;
+  value: string | number;
+  icon: LucideIcon;
+  tone?: "default" | "danger" | "warn" | "success";
+  hint?: string;
+}) {
   const toneClass = {
     default: "text-foreground",
     danger: "text-risk-red",

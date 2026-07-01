@@ -7,15 +7,49 @@ export interface FloorRisk {
   overallFireRisk: RiskLevelType;
 }
 
+export interface RoomBoundary {
+  id: string;
+  name: string;
+  x: number; // percentage 0-100 in the SVG coordinate space
+  y: number;
+  w: number;
+  h: number;
+  distanceToStaircase?: number; // metres
+  distanceToLift?: number; // metres
+}
+
 export interface FloorStatistics {
   directExits: number;
+  emergencyExits: number;
   doors: number;
   windows: number;
   distanceToStaircase: string; // e.g. "18 meters"
+  distanceToLift: string;
   staircases: number;
   lifts: number;
   maxOccupancy: number;
   currentOccupancy: number;
+  // CAD-extracted room data
+  roomNames?: string[];
+  roomBoundaries?: RoomBoundary[];
+}
+
+export interface FloorVulnerability {
+  overallVulnerability: number; // Percentage 0-100
+  fireRisk: number; // 0-100
+  occupancyRisk: number; // 0-100
+  evacuationDifficulty: number; // 0-100
+  safetyIndex: number; // 0-100
+  riskCategory: RiskLevelType;
+  // 8-factor breakdown
+  exitScore?: number;
+  doorScore?: number;
+  windowScore?: number;
+  occupancyScore?: number;
+  staircaseDistScore?: number;
+  liftDistScore?: number;
+  fireEquipmentScore?: number;
+  escapeRouteScore?: number;
 }
 
 export interface FloorDetails {
@@ -33,6 +67,8 @@ export interface CADDrawing {
   url: string; // URL, objectURL or Base64 DataURL
   type: "pdf" | "dwg" | "dxf" | "png" | "jpg" | "jpeg";
   size?: number; // in bytes
+  uploadDate?: string; // ISO date string
+  uploadedBy?: string; // User or system identifier
 }
 
 export interface FloorData {
@@ -43,5 +79,6 @@ export interface FloorData {
   details: FloorDetails;
   risks: FloorRisk;
   stats: FloorStatistics;
+  vulnerability?: FloorVulnerability;
   drawing?: CADDrawing;
 }

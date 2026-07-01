@@ -4,7 +4,17 @@ import { SeedProvider } from "./seed-provider";
 import { useApp, type UserRole } from "@/lib/store";
 import { Activity } from "lucide-react";
 
-export function AppShell({ title, subtitle, actions, children }: { title: string; subtitle?: string; actions?: ReactNode; children: ReactNode }) {
+export function AppShell({
+  title,
+  subtitle,
+  actions,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  actions?: ReactNode;
+  children: ReactNode;
+}) {
   const { role, setRole } = useApp();
   return (
     <SeedProvider>
@@ -18,9 +28,18 @@ export function AppShell({ title, subtitle, actions, children }: { title: string
                 Live · Emergency Operations
               </div>
               <div className="flex items-center gap-2">
-                <img src="/logo.svg" alt="TrustGrid Logo" className="h-6 w-auto object-contain hidden sm:block bg-white rounded-sm p-0.5" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+                <img
+                  src="/logo.svg"
+                  alt="TrustGrid Logo"
+                  className="h-6 w-auto object-contain hidden sm:block bg-white rounded-sm p-0.5"
+                  onError={(e) => {
+                    e.currentTarget.style.display = "none";
+                  }}
+                />
                 <h1 className="truncate text-lg font-bold tracking-tight sm:text-xl">{title}</h1>
-                <span className="hidden sm:inline-flex px-1.5 py-0.5 rounded-sm bg-primary/10 text-primary text-[10px] font-bold">TrustGrid.AI</span>
+                <span className="hidden sm:inline-flex px-1.5 py-0.5 rounded-sm bg-primary/10 text-primary text-[10px] font-bold">
+                  TrustGrid.AI
+                </span>
               </div>
               {subtitle && <p className="truncate text-xs text-muted-foreground">{subtitle}</p>}
             </div>
@@ -37,7 +56,9 @@ export function AppShell({ title, subtitle, actions, children }: { title: string
               </select>
               <div className="hidden sm:flex items-center gap-1.5 rounded-md border border-border bg-secondary px-2.5 py-1.5 text-xs">
                 <Activity className="h-3.5 w-3.5 text-risk-green" />
-                <span className="font-mono">{new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                <span className="font-mono">
+                  {new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                </span>
               </div>
             </div>
           </header>

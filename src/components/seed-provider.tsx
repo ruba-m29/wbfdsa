@@ -1,11 +1,15 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { seedIfEmpty } from "@/lib/seed";
+import { seedIfEmpty, reseedPersonnelIfNeeded } from "@/lib/seed";
+import { attachDexieHooks } from "@/services/dbSync";
 import { Flame } from "lucide-react";
 
 export function SeedProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
   useEffect(() => {
-    seedIfEmpty().finally(() => setReady(true));
+    attachDexieHooks();
+    seedIfEmpty()
+      .then(() => reseedPersonnelIfNeeded())
+      .finally(() => setReady(true));
   }, []);
   if (!ready) {
     return (

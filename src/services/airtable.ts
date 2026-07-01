@@ -27,7 +27,12 @@ function saveStoredData(data: any) {
 }
 
 // Helper to make Airtable HTTP requests
-async function airtableRequest(tableName: string, method: "GET" | "POST" | "PATCH" | "DELETE" = "GET", body?: any, recordId?: string): Promise<any> {
+async function airtableRequest(
+  tableName: string,
+  method: "GET" | "POST" | "PATCH" | "DELETE" = "GET",
+  body?: any,
+  recordId?: string,
+): Promise<any> {
   const config = getBackendConfig();
   if (config.useMockFallback || !config.airtableApiKey || !config.airtableBaseId) {
     return null; // Trigger mock
@@ -80,7 +85,7 @@ export const airtableService = {
     const newBuilding = {
       ...building,
       id: "rec_" + Math.random().toString(36).substr(2, 9),
-      createdAt: Date.now()
+      createdAt: Date.now(),
     };
     data.buildings.push(newBuilding);
     saveStoredData(data);
@@ -113,7 +118,7 @@ export const airtableService = {
     data.buildings = data.buildings.filter((b: any) => b.id !== id);
     data.floors = data.floors.filter((f: any) => f.buildingId !== id);
     // clean up floor details
-    Object.keys(data.floorDetailedData).forEach(key => {
+    Object.keys(data.floorDetailedData).forEach((key) => {
       if (key.startsWith(id + "_")) {
         delete data.floorDetailedData[key];
       }
@@ -148,7 +153,7 @@ export const airtableService = {
     const data = getStoredData();
     const newFloor = {
       ...floor,
-      id: "rec_" + Math.random().toString(36).substr(2, 9)
+      id: "rec_" + Math.random().toString(36).substr(2, 9),
     };
     data.floors.push(newFloor);
     saveStoredData(data);
@@ -206,29 +211,33 @@ export const airtableService = {
           currentOccupancy: Number(fields.currentOccupancy),
           riskLevel: fields.riskLevel,
           revisionNumber: fields.revisionNumber,
-          uploadDate: fields.uploadDate
+          uploadDate: fields.uploadDate,
         },
         risks: {
           floorRisk: fields.floorRisk,
           occupancyRisk: fields.occupancyRisk,
           individualRisk: fields.individualRisk,
-          overallFireRisk: fields.overallFireRisk
+          overallFireRisk: fields.overallFireRisk,
         },
         stats: {
           directExits: Number(fields.directExits),
+          emergencyExits: Number(fields.emergencyExits || 0),
           doors: Number(fields.doors),
           windows: Number(fields.windows),
           distanceToStaircase: fields.distanceToStaircase,
+          distanceToLift: fields.distanceToLift || "N/A",
           staircases: Number(fields.staircases),
           lifts: Number(fields.lifts),
           maxOccupancy: Number(fields.maxOccupancy),
-          currentOccupancy: Number(fields.currentOccupancy)
+          currentOccupancy: Number(fields.currentOccupancy),
         },
-        drawing: fields.drawingName ? {
-          name: fields.drawingName,
-          url: fields.drawingUrl || "",
-          type: fields.drawingType
-        } : undefined
+        drawing: fields.drawingName
+          ? {
+              name: fields.drawingName,
+              url: fields.drawingUrl || "",
+              type: fields.drawingType,
+            }
+          : undefined,
       };
     }
 
@@ -238,7 +247,9 @@ export const airtableService = {
     if (detailed) return detailed;
 
     // Return a default floor structure if none exists
-    const floorMeta = data.floors.find((f: any) => f.buildingId === buildingId && f.level === level);
+    const floorMeta = data.floors.find(
+      (f: any) => f.buildingId === buildingId && f.level === level,
+    );
     return {
       buildingId,
       level,
@@ -250,24 +261,26 @@ export const airtableService = {
         currentOccupancy: 0,
         riskLevel: "LOW",
         revisionNumber: "v1.0",
-        uploadDate: new Date().toISOString().split("T")[0]
+        uploadDate: new Date().toISOString().split("T")[0],
       },
       risks: {
         floorRisk: "LOW",
         occupancyRisk: "LOW",
         individualRisk: "LOW",
-        overallFireRisk: "LOW"
+        overallFireRisk: "LOW",
       },
       stats: {
         directExits: floorMeta?.totalExits || 2,
+        emergencyExits: 1,
         doors: 10,
         windows: 15,
         distanceToStaircase: "15 meters",
+        distanceToLift: "20 meters",
         staircases: 2,
         lifts: 1,
         maxOccupancy: 100,
-        currentOccupancy: 0
-      }
+        currentOccupancy: 0,
+      },
     };
   },
 
@@ -296,13 +309,13 @@ export const airtableService = {
       lifts: floorData.stats.lifts,
       drawingName: floorData.drawing?.name || "",
       drawingUrl: floorData.drawing?.url || "",
-      drawingType: floorData.drawing?.type || ""
+      drawingType: floorData.drawing?.type || "",
     };
 
     // Check if record exists to perform patch or post
     const filter = `filterByFormula=AND({buildingId}='${buildingId}',{level}=${level})`;
     const check = await airtableRequest(`FloorDetails?${encodeURI(filter)}`);
-    
+
     if (check?.records && check.records.length > 0) {
       const recordId = check.records[0].id;
       const remote = await airtableRequest("FloorDetails", "PATCH", { fields }, recordId);
@@ -317,11 +330,13 @@ export const airtableService = {
     data.floorDetailedData[key] = {
       ...floorData,
       buildingId,
-      level
+      level,
     };
 
     // Keep basic Floor record sync'd up as well
-    const floorMetaIndex = data.floors.findIndex((f: any) => f.buildingId === buildingId && f.level === level);
+    const floorMetaIndex = data.floors.findIndex(
+      (f: any) => f.buildingId === buildingId && f.level === level,
+    );
     if (floorMetaIndex !== -1) {
       data.floors[floorMetaIndex].totalExits = floorData.stats.directExits;
       data.floors[floorMetaIndex].availableExits = floorData.stats.directExits;
@@ -330,5 +345,5 @@ export const airtableService = {
 
     saveStoredData(data);
     return data.floorDetailedData[key];
-  }
+  },
 };

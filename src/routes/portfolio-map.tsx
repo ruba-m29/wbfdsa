@@ -1,7 +1,16 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useLiveQuery } from "dexie-react-hooks";
 import { useEffect, useRef, useState } from "react";
-import { MapPin, Search, Sparkles, Building2, Globe, ShieldAlert, CheckCircle, Navigation } from "lucide-react";
+import {
+  MapPin,
+  Search,
+  Sparkles,
+  Building2,
+  Globe,
+  ShieldAlert,
+  CheckCircle,
+  Navigation,
+} from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { db, type Building } from "@/lib/db";
 import { seedInfosystemBuildings } from "@/lib/seed";
@@ -12,7 +21,10 @@ export const Route = createFileRoute("/portfolio-map")({
   head: () => ({
     meta: [
       { title: "Portfolio Map — WB-FDVA" },
-      { name: "description", content: "Interactive geographical map view of all buildings and clients across cities." }
+      {
+        name: "description",
+        content: "Interactive geographical map view of all buildings and clients across cities.",
+      },
     ],
   }),
   component: PortfolioMapPage,
@@ -21,16 +33,16 @@ export const Route = createFileRoute("/portfolio-map")({
 const CITIES_LIST = [
   { name: "Bengaluru", lat: 12.9716, lng: 77.5946 },
   { name: "Pune", lat: 18.5204, lng: 73.8567 },
-  { name: "Hyderabad", lat: 17.3850, lng: 78.4867 },
+  { name: "Hyderabad", lat: 17.385, lng: 78.4867 },
   { name: "Chennai", lat: 13.0827, lng: 80.2707 },
-  { name: "Mumbai", lat: 19.0760, lng: 72.8777 },
-  { name: "Noida", lat: 28.5355, lng: 77.3910 },
+  { name: "Mumbai", lat: 19.076, lng: 72.8777 },
+  { name: "Noida", lat: 28.5355, lng: 77.391 },
   { name: "Gurugram", lat: 28.4595, lng: 77.0266 },
   { name: "Kolkata", lat: 22.5726, lng: 88.3639 },
   { name: "Ahmedabad", lat: 23.0225, lng: 72.5714 },
   { name: "Jaipur", lat: 26.9124, lng: 75.7873 },
   { name: "Kochi", lat: 9.9312, lng: 76.2673 },
-  { name: "Coimbatore", lat: 11.0168, lng: 76.9558 }
+  { name: "Coimbatore", lat: 11.0168, lng: 76.9558 },
 ];
 
 function PortfolioMapPage() {
@@ -39,7 +51,9 @@ function PortfolioMapPage() {
   const zones = useLiveQuery(() => db.zones.toArray(), []);
   const incidents = useLiveQuery(() => db.incidents.toArray(), []);
 
-  const [customer, setCustomer] = useState<"Infosystem" | "TrustGrid Demo Org" | "All">("Infosystem");
+  const [customer, setCustomer] = useState<"Infosystem" | "TrustGrid Demo Org" | "All">(
+    "Infosystem",
+  );
   const [selectedCity, setSelectedCity] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedBuildingId, setSelectedBuildingId] = useState<number | null>(null);
@@ -92,8 +106,13 @@ function PortfolioMapPage() {
     if (!floors || !zones) return { maxRisk: "SAFE", avgScore: 0 };
     const bFloors = floors.filter((f) => f.buildingId === building.id);
     const bZones = zones.filter((z) => z.buildingId === building.id);
-    const bIncidents = (incidents ?? []).filter((i) => i.buildingId === building.id && i.status === "active");
-    const activeIncLevel = bIncidents.length > 0 ? bFloors.find((f) => f.id === bIncidents[0].floorId)?.level ?? null : null;
+    const bIncidents = (incidents ?? []).filter(
+      (i) => i.buildingId === building.id && i.status === "active",
+    );
+    const activeIncLevel =
+      bIncidents.length > 0
+        ? (bFloors.find((f) => f.id === bIncidents[0].floorId)?.level ?? null)
+        : null;
     const impacts = assessBuilding(bZones, bFloors, activeIncLevel);
 
     if (impacts.length === 0) return { maxRisk: "SAFE", avgScore: 0 };
@@ -106,7 +125,9 @@ function PortfolioMapPage() {
           ? "YELLOW"
           : "SAFE";
 
-    const avgScore = Math.round(impacts.reduce((s, i) => s + i.breakdown.total, 0) / impacts.length);
+    const avgScore = Math.round(
+      impacts.reduce((s, i) => s + i.breakdown.total, 0) / impacts.length,
+    );
     return { maxRisk, avgScore };
   };
 
@@ -331,9 +352,9 @@ function PortfolioMapPage() {
     if (mapInstance && b.latitude !== undefined && b.longitude !== undefined) {
       mapInstance.setCenter({ lat: b.latitude, lng: b.longitude });
       mapInstance.setZoom(15);
-      
+
       // Find the corresponding marker and trigger click
-      const idx = filteredBuildings.findIndex(fb => fb.id === b.id);
+      const idx = filteredBuildings.findIndex((fb) => fb.id === b.id);
       if (idx !== -1 && markersRef.current[idx]) {
         winGoogleTriggerClick(markersRef.current[idx]);
       }
@@ -375,7 +396,8 @@ function PortfolioMapPage() {
           <Sparkles className="h-10 w-10 text-primary animate-pulse" />
           <h2 className="text-lg font-bold">No Seeded Buildings for Infosystem</h2>
           <p className="text-sm text-muted-foreground max-w-md">
-            Infosystem has 30 buildings spread across 12 major Indian cities. Click the button below to automatically generate the complete portfolio details in your local database.
+            Infosystem has 30 buildings spread across 12 major Indian cities. Click the button below
+            to automatically generate the complete portfolio details in your local database.
           </p>
           <button
             onClick={handleSeedInfosystem}
@@ -390,10 +412,30 @@ function PortfolioMapPage() {
         <div className="flex flex-col gap-4 h-[calc(100vh-140px)]">
           {/* KPI Summary Block */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <KpiItem label="Total Buildings" value={totalBuildingsCount} icon={Building2} color="var(--chart-3)" />
-            <KpiItem label="Cities Covered" value={uniqueCitiesCount} icon={Globe} color="var(--chart-4)" />
-            <KpiItem label="Active Incidents" value={activeIncidentsCount} icon={ShieldAlert} color={activeIncidentsCount > 0 ? "var(--risk-red)" : "var(--risk-green)"} />
-            <KpiItem label="Total Occupants" value={totalOccupants.toLocaleString()} icon={Navigation} color="var(--chart-2)" />
+            <KpiItem
+              label="Total Buildings"
+              value={totalBuildingsCount}
+              icon={Building2}
+              color="var(--chart-3)"
+            />
+            <KpiItem
+              label="Cities Covered"
+              value={uniqueCitiesCount}
+              icon={Globe}
+              color="var(--chart-4)"
+            />
+            <KpiItem
+              label="Active Incidents"
+              value={activeIncidentsCount}
+              icon={ShieldAlert}
+              color={activeIncidentsCount > 0 ? "var(--risk-red)" : "var(--risk-green)"}
+            />
+            <KpiItem
+              label="Total Occupants"
+              value={totalOccupants.toLocaleString()}
+              icon={Navigation}
+              color="var(--chart-2)"
+            />
           </div>
 
           <div className="flex-1 min-h-0 grid lg:grid-cols-[320px_1fr] border border-border rounded-lg overflow-hidden bg-card">
@@ -411,7 +453,7 @@ function PortfolioMapPage() {
                     className="w-full bg-secondary border border-border rounded-md pl-8 pr-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
                   />
                 </div>
-                
+
                 {/* Cities horizontal scroll */}
                 <div className="flex gap-1 overflow-x-auto pb-1 scrollbar-none text-[10px]">
                   <button
@@ -424,7 +466,13 @@ function PortfolioMapPage() {
                   >
                     All Cities
                   </button>
-                  {CITIES_LIST.filter(city => customer !== "Infosystem" || (buildings ?? []).some(b => b.city === city.name && b.ownerName === "Infosystem")).map((city) => (
+                  {CITIES_LIST.filter(
+                    (city) =>
+                      customer !== "Infosystem" ||
+                      (buildings ?? []).some(
+                        (b) => b.city === city.name && b.ownerName === "Infosystem",
+                      ),
+                  ).map((city) => (
                     <button
                       key={city.name}
                       onClick={() => {
@@ -471,13 +519,19 @@ function PortfolioMapPage() {
                     >
                       <div className="flex justify-between items-start gap-1">
                         <h4 className="text-xs font-bold truncate text-foreground">{b.name}</h4>
-                        <span className={`text-[9px] px-1.5 py-0.5 rounded border font-mono ${statusColor}`}>
+                        <span
+                          className={`text-[9px] px-1.5 py-0.5 rounded border font-mono ${statusColor}`}
+                        >
                           {maxRisk === "SAFE" ? "NORMAL" : maxRisk}
                         </span>
                       </div>
-                      <p className="text-[10px] text-muted-foreground truncate mt-0.5">{b.address}</p>
+                      <p className="text-[10px] text-muted-foreground truncate mt-0.5">
+                        {b.address}
+                      </p>
                       <div className="flex gap-3 text-[9px] text-muted-foreground mt-2">
-                        <span className="flex items-center gap-1"><MapPin className="h-3 w-3" /> {b.city}</span>
+                        <span className="flex items-center gap-1">
+                          <MapPin className="h-3 w-3" /> {b.city}
+                        </span>
                         <span>{b.floors} floors</span>
                         <span>{b.totalArea.toLocaleString()} m²</span>
                       </div>
@@ -495,7 +549,7 @@ function PortfolioMapPage() {
             {/* Google Map Panel */}
             <div className="relative h-full w-full bg-secondary/20">
               <div ref={mapRef} className="h-full w-full" />
-              {(!localStorage.getItem("wb-maps-api-key")) && (
+              {!localStorage.getItem("wb-maps-api-key") && (
                 <div className="absolute top-2 left-2 z-10 bg-black/85 text-yellow-500 border border-yellow-500/20 px-2.5 py-1.5 rounded text-[10px] font-medium shadow-md flex items-center gap-1.5">
                   <ShieldAlert className="h-3.5 w-3.5 text-yellow-500 shrink-0" />
                   <span>Google Maps running in Demo Mode. Set API key in Settings.</span>
@@ -509,14 +563,27 @@ function PortfolioMapPage() {
   );
 }
 
-function KpiItem({ label, value, icon: Icon, color }: { label: string; value: string | number; icon: any; color: string }) {
+function KpiItem({
+  label,
+  value,
+  icon: Icon,
+  color,
+}: {
+  label: string;
+  value: string | number;
+  icon: any;
+  color: string;
+}) {
   return (
     <div className="rounded-lg border border-border bg-card p-3 flex items-center justify-between shadow-sm">
       <div className="min-w-0">
         <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
         <div className="text-lg font-extrabold truncate mt-0.5">{value}</div>
       </div>
-      <div className="h-8 w-8 rounded-md flex items-center justify-center bg-secondary/60 text-muted-foreground shrink-0 ml-2" style={{ color }}>
+      <div
+        className="h-8 w-8 rounded-md flex items-center justify-center bg-secondary/60 text-muted-foreground shrink-0 ml-2"
+        style={{ color }}
+      >
         <Icon className="h-4 w-4" />
       </div>
     </div>

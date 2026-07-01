@@ -1,5 +1,17 @@
 import React, { useState } from "react";
-import { ZoomIn, ZoomOut, Maximize2, Download, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
+import {
+  ZoomIn,
+  ZoomOut,
+  Maximize2,
+  Download,
+  ChevronLeft,
+  ChevronRight,
+  RefreshCw,
+} from "lucide-react";
+import { Document, Page, pdfjs } from "react-pdf";
+
+// Set up pdf.js worker
+pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.js`;
 
 interface PDFViewerProps {
   url: string;
@@ -7,19 +19,25 @@ interface PDFViewerProps {
 }
 
 export function PDFViewer({ url, name }: PDFViewerProps) {
+  const [numPages, setNumPages] = useState<number>();
   const [page, setPage] = useState<number>(1);
-  const [zoom, setZoom] = useState<number>(100);
+  const [zoom, setZoom] = useState<number>(80);
   const [fitWidth, setFitWidth] = useState<boolean>(true);
+  const [containerWidth, setContainerWidth] = useState<number>(800);
+
+  const handleDocumentLoadSuccess = ({ numPages }: { numPages: number }) => {
+    setNumPages(numPages);
+    setPage(1);
+  };
 
   const handleZoomIn = () => setZoom((prev) => Math.min(prev + 25, 200));
   const handleZoomOut = () => setZoom((prev) => Math.max(prev - 25, 50));
-  
-  const handlePrevPage = () => setPage((prev) => Math.max(prev - 1, 1));
-  const handleNextPage = () => setPage((prev) => prev + 1);
 
-  // Construct standard PDF view parameters hash
-  const pdfHash = `#page=${page}&zoom=${zoom}${fitWidth ? "&view=FitH" : ""}`;
-  const viewerUrl = `${url}${pdfHash}`;
+  const handlePrevPage = () => setPage((prev) => Math.max(prev - 1, 1));
+  const handleNextPage = () => setPage((prev) => Math.min(prev + 1, numPages || 1));
+
+  // Calculate scale
+  const scale = zoom / 100;
 
   const handleDownload = () => {
     const link = document.createElement("a");
@@ -31,11 +49,13 @@ export function PDFViewer({ url, name }: PDFViewerProps) {
   };
 
   return (
-    <div className="flex flex-col h-[500px] w-full rounded-xl border border-border bg-card overflow-hidden">
+    <div className="flex flex-col h-[500px] w-full bg-card overflow-hidden">
       {/* PDF Controls Toolbar */}
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-muted/30 px-4 py-2 text-xs">
         <div className="flex items-center gap-1.5 font-medium text-foreground truncate max-w-[200px]">
-          <span className="truncate" title={name}>{name}</span>
+          <span className="truncate" title={name}>
+            {name}
+          </span>
         </div>
 
         {/* Page Nav */}
@@ -48,7 +68,9 @@ export function PDFViewer({ url, name }: PDFViewerProps) {
           >
             <ChevronLeft className="h-4 w-4" />
           </button>
-          <span className="min-w-[50px] text-center font-mono">Page {page}</span>
+          <span className="min-w-[50px] text-center font-mono">
+            {page} / {numPages || 1}
+          </span>
           <button
             onClick={handleNextPage}
             className="grid h-7 w-7 place-items-center rounded border border-border bg-background hover:bg-secondary"
@@ -112,12 +134,35 @@ export function PDFViewer({ url, name }: PDFViewerProps) {
       </div>
 
       {/* PDF View Container */}
-      <div className="flex-1 bg-[#1e1e1e] relative">
-        <iframe
-          src={viewerUrl}
-          className="w-full h-full border-none"
-          title="PDF Document Viewer"
-        />
+      <div
+        className="flex-1 bg-[#1e1e1e] relative overflow-auto flex justify-center p-4"
+        ref={(el) => {
+          if (el) setContainerWidth(el.clientWidth - 32);
+        }}
+      >
+        <Document
+          file={url}
+          onLoadSuccess={handleDocumentLoadSuccess}
+          loading={
+            <div className="text-muted-foreground flex items-center justify-center h-full">
+              Loading PDF...
+            </div>
+          }
+          error={
+            <div className="text-red-400 flex items-center justify-center h-full">
+              Failed to load PDF. Please ensure the URL is accessible and not blocked by CORS.
+            </div>
+          }
+        >
+          <Page
+            pageNumber={page}
+            scale={scale}
+            width={fitWidth ? containerWidth : undefined}
+            renderTextLayer={false}
+            renderAnnotationLayer={false}
+            className="shadow-xl"
+          />
+        </Document>
       </div>
     </div>
   );

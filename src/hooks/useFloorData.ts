@@ -6,6 +6,7 @@ import { toast } from "sonner";
 export function useFloorData(buildingId: string | null, level: number | null) {
   const [floorData, setFloorData] = useState<FloorData | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
+  const [isUploading, setIsUploading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -44,7 +45,10 @@ export function useFloorData(buildingId: string | null, level: number | null) {
     };
   }, [buildingId, level]);
 
-  const updateFloorStats = async (updatedStats: Partial<FloorStatistics>, updatedDetails?: Partial<FloorDetails>) => {
+  const updateFloorStats = async (
+    updatedStats: Partial<FloorStatistics>,
+    updatedDetails?: Partial<FloorDetails>,
+  ) => {
     if (!buildingId || level === null || !floorData) return;
 
     try {
@@ -53,15 +57,14 @@ export function useFloorData(buildingId: string | null, level: number | null) {
         ...floorData,
         stats: {
           ...floorData.stats,
-          ...updatedStats
+          ...updatedStats,
         },
         details: {
           ...floorData.details,
-          ...(updatedDetails || {})
-        }
+          ...(updatedDetails || {}),
+        },
       };
 
-      // Ensure currentOccupancy and maxOccupancy sync in details if they exist in stats
       if (updatedStats.currentOccupancy !== undefined) {
         updatedData.details.currentOccupancy = updatedStats.currentOccupancy;
       }
@@ -80,58 +83,158 @@ export function useFloorData(buildingId: string | null, level: number | null) {
     }
   };
 
-  const uploadCADFile = async (file: File) => {
-    if (!buildingId || level === null || !floorData) return;
+  const uploadCADFile = async (file: File, floorName: string = `Floor ${level}`) => {
+    if (!buildingId || level === null) return;
+
+    setIsUploading(true);
+    toast.loading(`Extracting AI architectural features from ${file.name}...`, { id: "ai-cad" });
 
     return new Promise<FloorData>((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = async (e) => {
         const fileUrl = e.target?.result as string;
         const extension = file.name.split(".").pop()?.toLowerCase() || "";
-        
+
         try {
           const service = getActiveService();
+
+          let baseData = floorData;
+          if (!baseData) {
+            baseData = {
+              buildingId,
+              level,
+              name: floorName,
+              details: {
+                floorName: floorName,
+                floorArea: 0,
+                maxOccupancy: 100,
+                currentOccupancy: 0,
+                riskLevel: "LOW",
+                revisionNumber: "v0.0",
+                uploadDate: new Date().toISOString().split("T")[0],
+              },
+              risks: {
+                floorRisk: "LOW",
+                occupancyRisk: "LOW",
+                individualRisk: "LOW",
+                overallFireRisk: "LOW",
+              },
+              stats: {
+                directExits: 2,
+                emergencyExits: 0,
+                doors: 0,
+                windows: 0,
+                distanceToStaircase: "0 meters",
+                distanceToLift: "0 meters",
+                staircases: 0,
+                lifts: 0,
+                maxOccupancy: 100,
+                currentOccupancy: 0,
+              },
+            };
+          }
+
+          // AI CAD Extraction
+          const { extractCADData, calculateVulnerability, uploadCADFileToBackend } =
+            await import("@/services/aiCadService");
+          const extractedStats = await extractCADData(file);
+
+          // Upload to backend
+          await uploadCADFileToBackend(`cad_${Date.now()}`, file, fileUrl);
+
+          // Merge stats
+          const newStats = {
+            ...baseData.stats,
+            ...extractedStats,
+          };
+
+          // Calculate new vulnerability using 8-factor formula
+          const vulnerability = await calculateVulnerability(
+            extractedStats,
+            baseData.details.currentOccupancy,
+            baseData.details.maxOccupancy,
+          );
+
+          const uploadDate = new Date().toISOString().split("T")[0];
+          const revNumber =
+            parseFloat(
+              (baseData.details.revisionNumber || "v0").replace("v", "").replace("R", ""),
+            ) || 0;
+
           const updatedData: FloorData = {
-            ...floorData,
+            ...baseData,
+            stats: newStats,
+            vulnerability,
             details: {
-              ...floorData.details,
-              revisionNumber: `v${(parseFloat(floorData.details.revisionNumber.replace("v", "")) + 0.1).toFixed(1)}`,
-              uploadDate: new Date().toISOString().split("T")[0]
+              ...baseData.details,
+              revisionNumber: `v${(revNumber + 0.1).toFixed(1)}`,
+              uploadDate,
             },
             drawing: {
               name: file.name,
               url: fileUrl,
               type: extension as any,
-              size: file.size
-            }
+              size: file.size,
+              uploadDate,
+              uploadedBy: "WB-FDVA System",
+            },
           };
 
           const saved = await service.saveFloorData(buildingId, level, updatedData);
           setFloorData(saved);
-          toast.success(`CAD file "${file.name}" uploaded successfully!`);
+          toast.dismiss("ai-cad");
+          toast.success(
+            `CAD Analysis Complete! Extracted ${extractedStats.doors} doors, ${extractedStats.staircases} staircases, ${extractedStats.roomNames?.length ?? 0} rooms.`,
+          );
           resolve(saved);
         } catch (err) {
           console.error("Failed to upload drawing:", err);
+          toast.dismiss("ai-cad");
           toast.error("Failed to save uploaded drawing on active service.");
           reject(err);
+        } finally {
+          setIsUploading(false);
         }
       };
 
       reader.onerror = () => {
+        setIsUploading(false);
+        toast.dismiss("ai-cad");
         toast.error("Failed to read CAD file.");
         reject(new Error("File reading error"));
       };
 
-      // Read as DataURL (base64) so it works in iframes and img tags natively and persists in storage
+      // Read as DataURL so it persists in storage and works in overlays
       reader.readAsDataURL(file);
     });
+  };
+
+  const deleteCADFile = async () => {
+    if (!buildingId || level === null || !floorData) return;
+    try {
+      const service = getActiveService();
+      const updatedData: FloorData = { ...floorData };
+      delete updatedData.drawing;
+      // Keep last-known stats and vulnerability — do NOT reset them
+
+      const saved = await service.saveFloorData(buildingId, level, updatedData);
+      setFloorData(saved);
+      toast.success("CAD Drawing deleted. Statistics retained from last analysis.");
+      return saved;
+    } catch (err) {
+      console.error("Failed to delete CAD drawing:", err);
+      toast.error("Failed to delete CAD drawing.");
+      throw err;
+    }
   };
 
   return {
     floorData,
     loading,
+    isUploading,
     error,
     updateFloorStats,
-    uploadCADFile
+    uploadCADFile,
+    deleteCADFile,
   };
 }

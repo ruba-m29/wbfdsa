@@ -78,10 +78,18 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { title: "WB-FDVA powered by TrustGrid.AI" },
-      { name: "description", content: "Emergency operations platform for fire vulnerability assessment, incident response, and rescue prioritization." },
+      {
+        name: "description",
+        content:
+          "Emergency operations platform for fire vulnerability assessment, incident response, and rescue prioritization.",
+      },
       { name: "author", content: "WB-FDVA" },
       { property: "og:title", content: "WB-FDVA powered by TrustGrid.AI" },
-      { property: "og:description", content: "Emergency operations platform for fire vulnerability assessment, incident response, and rescue prioritization." },
+      {
+        property: "og:description",
+        content:
+          "Emergency operations platform for fire vulnerability assessment, incident response, and rescue prioritization.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "twitter:site", content: "@Lovable" },
